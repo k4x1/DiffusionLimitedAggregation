@@ -1,7 +1,7 @@
 using UnityEngine;
 using UnityEditor;
 using System.IO;
-
+namespace DLA { 
 public class TextureSaver
 {
 
@@ -61,4 +61,5 @@ public class TextureSaver
         AssetDatabase.Refresh();
 
     }
+}
 }
