@@ -6,17 +6,29 @@ using System.Collections.Generic;
 namespace DLA { 
     public class DLA : MonoBehaviour
     {
-        public int resolution = 50;
+        public int resolution = 513;
         public bool[,] DLAmap;
         public Terrain terrain;
-        float[,] heightMapData = new float[513, 513];
+        float[,] heightMapData;
         List<Walker> walkers = new List<Walker>();
         public int walkerCount = 10000;
-        public int maxWalkers = 0;
-        void Start()
+        public int maxWalkers = 200;
+    
+        public void StartDLA()
         {
-            DLAmap = new bool[resolution, resolution];;
+            walkers = new List<Walker>();
+            heightMapData = new float[resolution, resolution];
+            DLAmap = new bool[resolution, resolution];
             StartCoroutine(initializeDLA());
+
+        }
+        public void StopDLA()
+        {
+            StopAllCoroutines();
+            terrain.terrainData.SetHeights(0, 0, heightMapData);
+            walkers = new List<Walker>();
+            heightMapData = new float[resolution, resolution];
+            DLAmap = new bool[resolution, resolution];
         }
         void InstantiateWalker()
         {
@@ -56,7 +68,6 @@ namespace DLA {
                 
                         heightMapData[walkerPosX, walkerPosY] = strength * 0.2f;
                     }
-                    Debug.Log("walked");
                 }
                 yield return null;
             }
@@ -67,22 +78,12 @@ namespace DLA {
         }
         private void OnDrawGizmos()
         {
-            Gizmos.color = new Color(1,0,0,0.5f);
             if (walkers.Count == 0) return;
             foreach (Walker walker in walkers) {
                 if (walker == null) continue;
+                Gizmos.color = walker.inPos ? new Color(0,1,0,0.5f) : new Color(1, 0, 0, 0.5f);
                 Gizmos.DrawCube(new Vector3(walker.GetPos().x,30, walker.GetPos().y) , Vector3.one);
             }
-        
-           /* for (int i = 0; i < DLAmap.GetLength(0); i++)
-            {
-                for (int j = 0; j < DLAmap.GetLength(1); j++)
-                {
-                    Gizmos.color = DLAmap[i, j] ? Color.red : Color.green;  
-
-                    Gizmos.DrawCube(new Vector3(i, 29, j), Vector3.one);
-                }
-            }*/
         }
     }
 }
