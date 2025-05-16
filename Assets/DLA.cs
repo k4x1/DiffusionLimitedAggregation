@@ -12,6 +12,9 @@ using Unity.VisualScripting;
 using System.Linq.Expressions;
 using System.Globalization;
 using Debug = UnityEngine.Debug;
+using System.Xml.Schema;
+using NUnit.Framework.Constraints;
+using UnityEngine.UIElements;
 
 namespace DLA {
     [ExecuteInEditMode]
@@ -22,6 +25,8 @@ namespace DLA {
         public int maxWalkers = 200;
         public Terrain terrain;
 
+        public int  radius=30;
+        public float standardDeviation = 20;
         public bool[,] DLAmap;
         float[,] heightMapData;
         List<Walker> walkers = new List<Walker>();
@@ -79,7 +84,7 @@ namespace DLA {
             heightMapData = new float[resolution, resolution];
             DLAmap = new bool[resolution, resolution];
        
-            DLAmap[resolution / 2, resolution / 2] = true;
+            DLAmap[30, 30] = true;
         }
         void InstantiateWalker()
         {
@@ -102,7 +107,7 @@ namespace DLA {
                     {
                         Vector2Int walkerPos = walker.GetPos();
                         float dist = Vector2Int.Distance(walkerPos, new Vector2Int(centerX, centerY));
-                        float strength = Mathf.Exp(-5.0f * (dist / maxDist));
+                        float strength = Mathf.Exp(-2f * (dist / maxDist));
                         lock (mapLock) {
                             DLAmap[walkerPos.x, walkerPos.y] = true;
                             heightMapData[walkerPos.x, walkerPos.y] = strength;
@@ -124,7 +129,11 @@ namespace DLA {
             #if UNITY_EDITOR
             EditorApplication.delayCall += () =>
             {
-                terrain.terrainData.SetHeights(0, 0, heightMapData);
+                float[,] blurredData = Blur.GaussianBlur(heightMapData, radius, standardDeviation);
+                blurredData = AddMultidimensionalFloats(blurredData, Blur.GaussianBlur(heightMapData,Mathf.CeilToInt(radius*0.5f), standardDeviation*0.5f), 0.5f);
+                blurredData = AddMultidimensionalFloats(blurredData, Blur.GaussianBlur(heightMapData, Mathf.CeilToInt(radius * 0.25f), standardDeviation * 0.25f), 0.3f);
+                blurredData = MultiplyMultidimensionalFloats(blurredData, 0.33333f);
+                terrain.terrainData.SetHeights(0, 0, blurredData);
                 EditorUtility.SetDirty(terrain.terrainData);
                 Debug.Log("done normal tasks");
             };
@@ -134,6 +143,34 @@ namespace DLA {
 
          
 
+        }
+        float[,] AddMultidimensionalFloats(float[,] a, float[,] b, float weight = 1) 
+        {
+            int width = a.GetLength(0);
+            int height = a.GetLength(1);
+            float[,] combined = new float[width,height];
+            for (int i = 0; i < width; i++)
+            {
+                for (int j = 0; j < height; j++)
+                {
+                    combined[i, j] = a[i,j] + b[i,j]* weight; 
+                }
+            }
+            return combined;
+        }
+        float[,] MultiplyMultidimensionalFloats(float[,] a, float b)
+        {
+            int width = a.GetLength(0);
+            int height = a.GetLength(1);
+            float[,] combined = new float[width, height];
+            for (int i = 0; i < width; i++)
+            {
+                for (int j = 0; j < height; j++)
+                {
+                    combined[i, j] = a[i, j] * b;
+                }
+            }
+            return combined;
         }
         IEnumerator initializeDLA()
         {
@@ -186,5 +223,73 @@ namespace DLA {
                 Gizmos.DrawCube(new Vector3(walker.GetPos().x,30, walker.GetPos().y) , Vector3.one);
             }
         }
+    }
+    static class Blur { 
+        public static float[,] GaussianBlur(float[,] toBlur, int radius, float standardDeviation)
+        {
+            int width = toBlur.GetLength(0);
+            int height = toBlur.GetLength(1);
+            float[] kernel = CalculateKernel(radius, standardDeviation);
+
+            float[,] temp = new float[width,height];
+            //horizontal pass
+            for (int y = 0; y < height; y++)
+            {
+                for (int x = 0; x < width; x++)
+                {
+                    float sum = 0f;
+
+                    for (int i = -radius; i <= radius; i++)
+                    {
+                        int sampleX = Mathf.Clamp(x + i, 0, width - 1);
+                        sum += toBlur[sampleX, y] * kernel[i + radius];
+                    }
+                    temp[x, y] = sum;   
+                }
+            }
+            //vertical pass
+            float[,] blurredResult = new float[width,height];
+            for (int y = 0; y < height; y++)
+            {
+                for (int x = 0; x < width; x++)
+                {
+                    float sum = 0f;
+
+                    for (int i = -radius; i <= radius; i++)
+                    {
+                        int sampleY = Mathf.Clamp(y + i, 0, height - 1);
+                        sum += temp[x, sampleY] * kernel[i + radius];
+                    }
+                    blurredResult[x, y] = sum;
+                    if (blurredResult[x, y] == 0f) continue;
+                  //  Debug.Log($"blurring ({toBlur[x, y]}) into ({blurredResult[x,y]}) ({sum})");
+                }
+            }
+            return blurredResult;
+
+        }
+        public static float[] CalculateKernel(int radius, float standardDeviation)
+        {
+            int kernelSize = 2 * radius + 1;
+            float[] kernel = new float[kernelSize];
+            float twoDeviationSquared = 2 * standardDeviation * standardDeviation;
+            float inverseDeviationRoot = 1 / Mathf.Sqrt(twoDeviationSquared * Mathf.PI);
+            float total = 0f;
+
+            for (int i = -radius; i <= radius; i++)
+            {
+                float dist = i * i;
+                int idx = i + radius;
+                kernel[idx] = inverseDeviationRoot * Mathf.Exp(-dist / twoDeviationSquared);
+                total += kernel[idx];
+            }
+            for (int i = 0; i < kernelSize; i++)
+            {
+                kernel[i] /= total;
+               // Debug.Log($"kernel at {i} = {kernel[i]}");
+            }
+            return kernel;
+        }
+
     }
 }
