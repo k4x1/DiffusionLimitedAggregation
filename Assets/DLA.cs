@@ -1,48 +1,147 @@
-using System.Collections;
-using UnityEngine;
-using Random = UnityEngine.Random;
-using System.Collections.Generic;
+#if UNITY_EDITOR
+using UnityEditor;
+#endif
 
-namespace DLA { 
+using System.Collections;
+using System.Diagnostics;
+using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
+using UnityEngine;
+using Unity.VisualScripting;
+using System.Linq.Expressions;
+using System.Globalization;
+using Debug = UnityEngine.Debug;
+
+namespace DLA {
+    [ExecuteInEditMode]
     public class DLA : MonoBehaviour
     {
         public int resolution = 513;
-        public bool[,] DLAmap;
-        public Terrain terrain;
-        float[,] heightMapData;
-        List<Walker> walkers = new List<Walker>();
         public int walkerCount = 10000;
         public int maxWalkers = 200;
-    
-        public void StartDLA()
+        public Terrain terrain;
+
+        public bool[,] DLAmap;
+        float[,] heightMapData;
+        List<Walker> walkers = new List<Walker>();
+        
+        private SynchronizationContext unityContext;
+        private CancellationTokenSource cts;
+        private object mapLock = new object();
+        public void StartCoroutineDLA()
         {
+            StopDLA();
             walkers = new List<Walker>();
             heightMapData = new float[resolution, resolution];
             DLAmap = new bool[resolution, resolution];
+            DLAmap[resolution / 2, resolution / 2] = true;
             StartCoroutine(initializeDLA());
+        }
+        public void StartTaskDLA()
+        {
+
+            StopDLA();
+           
+            for (int i = 0; i < walkerCount; i++)
+            {
+                InstantiateWalker();
+            }
+            cts = new CancellationTokenSource();
+
+            Stopwatch stopwatch = Stopwatch.StartNew();
+
+            Task.Run(() => {
+                RunDLA(cts.Token);
+                stopwatch.Stop();
+#if UNITY_EDITOR
+                EditorApplication.delayCall += () =>
+                {
+                    Debug.Log($"DLA has taken {stopwatch.Elapsed.TotalSeconds:F3} time to run | resolution {resolution} | maxWalkers {maxWalkers} | walkerCount {walkerCount}");
+                };
+#else
+                Debug.Log($"DLA has taken {stopwatch.Elapsed.TotalSeconds:F3} time to run | resolution {resolution} | maxCalkers {maxWalkers} | walkerCount {walkerCount}");
+#endif
+            },
+            cts.Token);
 
         }
         public void StopDLA()
         {
+            if (cts != null)
+            {
+                cts.Cancel();
+                cts.Dispose();
+                cts = null;
+            }
             StopAllCoroutines();
-            terrain.terrainData.SetHeights(0, 0, heightMapData);
             walkers = new List<Walker>();
             heightMapData = new float[resolution, resolution];
             DLAmap = new bool[resolution, resolution];
+       
+            DLAmap[resolution / 2, resolution / 2] = true;
         }
         void InstantiateWalker()
         {
             walkers.Add(new Walker(DLAmap));
         }
+        private void RunDLA(CancellationToken token)
+        {
+            int stuckCount = 0;
+            int centerX = resolution / 2;
+            int centerY = resolution / 2;
+            float maxDist = Mathf.Sqrt(centerX * centerX + centerY * centerY);
+
+            while (stuckCount < maxWalkers && !token.IsCancellationRequested)
+            {
+                foreach(Walker walker in walkers) {
+                    if (token.IsCancellationRequested) break;
+                    if (walker.inPos) continue; // gotta update this to kill the walker at some point
+
+                    if (walker.StepWalker())
+                    {
+                        Vector2Int walkerPos = walker.GetPos();
+                        float dist = Vector2Int.Distance(walkerPos, new Vector2Int(centerX, centerY));
+                        float strength = Mathf.Exp(-5.0f * (dist / maxDist));
+                        lock (mapLock) {
+                            DLAmap[walkerPos.x, walkerPos.y] = true;
+                            heightMapData[walkerPos.x, walkerPos.y] = strength;
+                        }
+                        stuckCount++;
+                        if(stuckCount >= maxWalkers)
+                        {
+                            break;
+                        }
+                    }
+                } 
+            }
+            if (token.IsCancellationRequested)
+            {
+                Debug.Log("DLA canceled");
+                return;
+            }
+
+            #if UNITY_EDITOR
+            EditorApplication.delayCall += () =>
+            {
+                terrain.terrainData.SetHeights(0, 0, heightMapData);
+                EditorUtility.SetDirty(terrain.terrainData);
+                Debug.Log("done normal tasks");
+            };
+            #else
+
+            #endif
+
+         
+
+        }
         IEnumerator initializeDLA()
         {
-            DLAmap[resolution/2,resolution/2] = true;
+            Stopwatch stopwatch = Stopwatch.StartNew();
+
             int count = 0;
       
-            for (int i = 0; i < walkerCount; i++)
-            {
-                InstantiateWalker();
-            }
+    
             while (count < maxWalkers)
             {
                 for (int j = 0; j < walkers.Count; j++)
@@ -71,7 +170,9 @@ namespace DLA {
                 }
                 yield return null;
             }
-                        terrain.terrainData.SetHeights(0, 0, heightMapData);
+            stopwatch.Stop();
+            Debug.Log($"DLA courutine has taken {stopwatch.Elapsed.TotalSeconds:F3} time to run | resolution {resolution} | maxCalkers {maxWalkers} | walkerCount {walkerCount}");
+            terrain.terrainData.SetHeights(0, 0, heightMapData);
 
             Debug.Log("done");
 

@@ -3,17 +3,29 @@ namespace DLA
 {
     public class Walker
     {
-        public Walker(bool[,] _map)
-        {
-            DLAmap = _map;
-            pos = new Vector2Int(Random.Range(0, DLAmap.GetLength(0)), Random.Range(0, DLAmap.GetLength(1)));
-        }
+
+        private static readonly object rndLock = new object();
+        private static readonly System.Random globalRnd = new System.Random();
+        private readonly System.Random rnd;
+
         Vector2Int pos = new Vector2Int(0, 0);
         bool[,] DLAmap;
         public bool inPos = false;
         public int maxSteps = 100;
         public int stepCount = 0;
-
+        
+        public Walker(bool[,] _map)
+        {
+            int seed;
+            lock (rndLock)
+            {
+                seed = globalRnd.Next(); 
+            }
+            rnd = new System.Random();
+            DLAmap = _map;
+          //  pos = new Vector2Int(Random.Range(0, DLAmap.GetLength(0)), Random.Range(0, DLAmap.GetLength(1)));
+            pos = new Vector2Int(rnd.Next(0,DLAmap.GetLength(0)), rnd.Next(0, DLAmap.GetLength(1)));
+        }
         public bool StepWalker()
         {
             int width = DLAmap.GetLength(0);
@@ -21,7 +33,10 @@ namespace DLA
             Vector2Int offset = new Vector2Int(pos.x, pos.y);
             do
             {
-                offset = new Vector2Int(Random.Range(-1, 2), Random.Range(-1, 2));
+                int dx = rnd.Next(-1, 2);
+                int dy = rnd.Next(-1, 2);
+                //offset = new Vector2Int(Random.Range(-1, 2), Random.Range(-1, 2));
+                offset = new Vector2Int(dx, dy);
             }
             while (offset == Vector2Int.zero);
 

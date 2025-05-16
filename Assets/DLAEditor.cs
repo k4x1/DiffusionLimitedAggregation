@@ -12,11 +12,16 @@ namespace DLA
             DLA dlaRef = (DLA)target;
 
             EditorGUILayout.Space();
-            if (GUILayout.Button("Run DLA"))
+            if (GUILayout.Button("Run task DLA"))
             {
-                dlaRef.StartDLA();
-            EditorGUILayout.Space();
+                dlaRef.StartTaskDLA();
             }       
+            EditorGUILayout.Space();
+            if (GUILayout.Button("Run coroutine DLA"))
+            {
+                dlaRef.StartCoroutineDLA();
+            }       
+            EditorGUILayout.Space();
             if (GUILayout.Button("Stop DLA"))
             {
                 dlaRef.StopDLA();
