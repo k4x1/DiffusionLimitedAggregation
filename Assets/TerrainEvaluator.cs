@@ -1,10 +1,10 @@
 using UnityEngine;
 public enum Geomorphon
 {
-    flat, peak, ridge, shoulder, pit, slope, spur, valley, footslope, hollow
+    flat, peak, ridge, shoulder, pit, slope, spur, valley, footslope, hollow, none
 }
 
-public class TerrainEvaluator : MonoBehaviour
+public class TerrainEvaluator
 {
     /*
     so first we must define the 10 geomorphons
@@ -19,9 +19,8 @@ public class TerrainEvaluator : MonoBehaviour
     0 0 0   0 1 0    1 0 1    0 0 0       1 0 1
     1 1 1   1 1 1    1 0 1    1 1 1       1 1 1
 
-    (actually 4x4 just drawing it like that to make it easier to see, top down view)
 
-    look at multidimensional floats and determine the geomorphs in it, then get it as a percentage, can also render it as a gizmo
+    look at multidimensional floats and determine the geomorphons in it, then get it as a percentage, can also render it as a gizmo
 
     determine what pixel size and real height will be making sure it scales properly with the studies numbers (1pixel = 800m^2) 
     
@@ -30,28 +29,61 @@ public class TerrainEvaluator : MonoBehaviour
     and get its PTRM rating
     then compare it with other heightmaps (gather online and maybe implement perlin myself)
 
-
     source https://dl.acm.org/doi/fullHtml/10.1145/3514244#sec-8
 
-    then to make sure there are more than 1 source for accuracy as the above example doesnt acdtually consider
+    this is actually way harder than I thought because I have to find this lookup file to generare the geomorphons
+    https://grass.osgeo.org/grass-stable/manuals/r.geomorphon.html
+    I spent like 3 hours trying to find this file, went through all of the source code history and downloaded the entire program to try to figure out where to get that lookup table for now 
+    I will just do the second method
+
+    then to make sure there are more than 1 source for accuracy as the above example doesnt actually consider
     gather elevation histograms and compare with my result using the chi squared test
 
 
 
-    */
+    /*
+
+    // E N W S 
+    Vector2Int[] directions = { 
+        new(1, 0), new(1, 1), new(0, 1), new(-1, 1), 
+        new(-1, 0), new(-1, -1), new(0, -1), new(1, -1), 
+    };
+    Geomorphon[,] GeomorphonMap;
+    float[] percentages;
+    float[,] heightMap;
+    float[] GetGeomorphonPercentages(float[,] input)
+    {
+        heightMap = input;
+
+
+        return new float[8];
+    }
+
+    Geomorphon GetGeomorphonType(Vector2Int center, int radius = 2, float flatThreshold = 0.01f)
+    {
+        int width = heightMap.GetLength(0);
+        int height = heightMap.GetLength(1);
+        GeomorphonMap = new Geomorphon[width, height];
+        float inputCenter = heightMap[center.x, center.y];
+
+        int[] touple = new int[8];
+
+        for (int i = 0; i < 8; i++)
+        {
+            Vector2Int dir = directions[i];
+
+
+        }
+
+
+
+        return Geomorphon.none;
+    }
+
+/*    Geomorphon CalculateFromTouple(int[] touple)
+    {
+
+    }*/
 
     
-
-    static Vector2Int[] directions = {new(1,0)}
-    float[,] input; 
-    void Start()
-    {
-        
-    }
-
-    // Update is called once per frame
-    void Update()
-    {
-        
-    }
 }

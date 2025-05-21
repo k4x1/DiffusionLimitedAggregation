@@ -84,7 +84,7 @@ namespace DLA {
             heightMapData = new float[resolution, resolution];
             DLAmap = new bool[resolution, resolution];
        
-            DLAmap[30, 30] = true;
+            DLAmap[resolution / 2, resolution / 2] = true;
         }
         void InstantiateWalker()
         {
