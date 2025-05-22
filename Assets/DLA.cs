@@ -133,7 +133,8 @@ namespace DLA {
                 blurredData = AddMultidimensionalFloats(blurredData, Blur.GaussianBlur(heightMapData,Mathf.CeilToInt(radius*0.5f), standardDeviation*0.5f), 0.5f);
                 blurredData = AddMultidimensionalFloats(blurredData, Blur.GaussianBlur(heightMapData, Mathf.CeilToInt(radius * 0.25f), standardDeviation * 0.25f), 0.3f);
                 blurredData = MultiplyMultidimensionalFloats(blurredData, 0.33333f);
-                terrain.terrainData.SetHeights(0, 0, blurredData);
+                float[,] autoExposed = AutoExposure.AutoExpose(blurredData);
+                terrain.terrainData.SetHeights(0, 0, autoExposed);
                 EditorUtility.SetDirty(terrain.terrainData);
                 Debug.Log("done normal tasks");
             };
@@ -250,7 +251,7 @@ namespace DLA {
             //vertical pass
             float[,] blurredResult = new float[width,height];
             for (int y = 0; y < height; y++)
-            {
+            {   
                 for (int x = 0; x < width; x++)
                 {
                     float sum = 0f;
@@ -291,5 +292,42 @@ namespace DLA {
             return kernel;
         }
 
+    }
+    static class AutoExposure
+    {
+
+        public static float[,] AutoExpose(float[,] map)
+        {
+            int width = map.GetLength(0);
+            int height = map.GetLength(1);
+
+            float minH = float.MaxValue;
+            float maxH = float.MinValue;
+
+            for (int x = 0; x < width; x++) { 
+                for (int y = 0; y < height; y++)
+                {
+                    float point = map[x, y];
+
+                    if (point < minH) minH = point;
+                    if (point > maxH) maxH = point;
+                }
+            }
+
+            float range = maxH - minH;
+            if (range <= 0f) return map;
+
+  
+            float[,] norm = new float[width, height];
+            for (int x = 0; x < width; x++)
+            {
+                for (int y = 0; y < height; y++)
+                {
+                    norm[x, y] = (map[x, y] - minH) / range;
+                }
+            }
+
+            return norm;
+        }
     }
 }
