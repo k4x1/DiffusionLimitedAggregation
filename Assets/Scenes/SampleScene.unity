@@ -171,6 +171,10 @@ MonoBehaviour:
   terrain: {fileID: 277028964}
   radius: 24
   standardDeviation: 8
+  autoExpose: 0
+  blur: 0
+  weightFalloff: 0
+  smoothHeights: 0
 --- !u!154 &277028963
 TerrainCollider:
   m_ObjectHideFlags: 0
@@ -612,6 +616,10 @@ MonoBehaviour:
   terrain: {fileID: 1560787789}
   radius: 24
   standardDeviation: 8
+  autoExpose: 0
+  blur: 0
+  weightFalloff: 0
+  smoothHeights: 0
 --- !u!154 &1560787788
 TerrainCollider:
   m_ObjectHideFlags: 0
@@ -811,6 +819,56 @@ Terrain:
   m_EnableHeightmapRayTracing: 1
   m_EnableTreesAndDetailsRayTracing: 0
   m_TreeMotionVectorModeOverride: 3
+--- !u!1 &2014706076
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 2014706078}
+  - component: {fileID: 2014706077}
+  m_Layer: 0
+  m_Name: GameObject
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &2014706077
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2014706076}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c36e760cc857da64abcd3c5fb8d384ac, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  generatedHeightMap: {fileID: 0}
+  realHeightMap: {fileID: 0}
+  result: 0
+  gizmoBarWidth: 0.1
+  gizmoMaxHeight: 5
+  histogramSpacing: 1
+--- !u!4 &2014706078
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2014706076}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 302.62326, y: -128.17432, z: 344.77548}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &2135133078
 GameObject:
   m_ObjectHideFlags: 0
@@ -960,3 +1018,4 @@ SceneRoots:
   - {fileID: 2135133080}
   - {fileID: 901430346}
   - {fileID: 1627510124}
+  - {fileID: 2014706078}
