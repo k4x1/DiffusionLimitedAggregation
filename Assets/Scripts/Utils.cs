@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Unity.VisualScripting;
+using UnityEditor.Callbacks;
 using UnityEngine;
 
 namespace DLA
@@ -134,8 +135,9 @@ namespace DLA
             }
             return combined;
         }
-        public static int[,] ComputeWeightMap(bool[,] map, int res)
+        public static int[,] ComputeWeightMap(bool[,] map)
         {
+            int res = map.GetLength(0); 
             int[,] weights = new int[res, res];
             Queue<Vector2Int> boundaryQueue = new Queue<Vector2Int>();
 
@@ -145,40 +147,46 @@ namespace DLA
                 new Vector2Int(0,  1), // N 
                 new Vector2Int(0, -1)  // S
             };
-            for (int i = 0; i < res; i++)
+            for (int x = 0; x < res; x++)
             {
-                weights[i, 0] = 1;
-                weights[i, res - 1] = 1;
-                weights[0, i] = 1;
-                weights[res - 1, i] = 1;
-            }
-            bool changed = true;
-
-            while (changed)
-            {
-                changed = false;
-                for(int x = 1; x < res-1; x++)
+                for (int y = 0; y < res; y++)
                 {
-                    for (int y = 1; y < res - 1; y++)
+                    if(!map[x, y]) continue;
+                    bool isBoundary = x == 0 || y == 0 || x == res - 1 || y == res - 1;
+                    for (int i = 0; !isBoundary && i < directions.Length; i++)
                     {
-                        int best = 0;
-                        foreach(Vector2Int dir in directions)
+                        Vector2Int dir = directions[i];
+                        int newX = x + dir.x;
+                        int newY = y + dir.y;
+                        if (newX < 0 || newX >= res || newY < 0 || newY >= res || !map[newX, newY])
                         {
-                            int newX = x + dir.x; 
-                            int newY = y + dir.y;
-
-                            if (weights[newX, newY] > best)
-                            {
-                                best = weights[newX, newY];
-                            }
-                            int canditate = best + 1;
-                            if (canditate > weights[x, y])
-                            {
-                                weights[x,y] = canditate;
-                                changed = true;
-                            }
-
+                            isBoundary = true;
                         }
+                    }
+
+                    if (isBoundary)
+                    {
+                        weights[x, y] = 1;
+                        boundaryQueue.Enqueue(new Vector2Int(x, y));
+                    }
+                }
+            }
+            while (boundaryQueue.Count > 0)
+            {
+                Vector2Int popped = boundaryQueue.Dequeue();
+                int w = weights[popped.x, popped.y];
+                foreach(Vector2Int dir in directions)
+                {
+                    int newX = popped.x + dir.x;
+                    int newY = popped.y + dir.y;
+                    if (newX < 0 || newX >= res || newY < 0 || newY >= res) continue;
+
+                    if (!map[newX, newY]) continue;
+
+                    if (weights[newX, newY] < w + 1)
+                    {
+                        weights[newX, newY] = w + 1;
+                        boundaryQueue.Enqueue(new Vector2Int(newX, newY));
                     }
                 }
             }
@@ -186,8 +194,10 @@ namespace DLA
             return weights;
         }
 
-        public static void ApplySmoothHeights(int[,] weights, int res, ref float[,] heights)
+        public static float[,] ApplySmoothHeights(int[,] weights)
         {
+            int res = weights.GetLength(0);
+            float[,] heights = new float[res,res];
             int maxWeight = 0;
             for (int x = 0; x < res; x++)
             {
@@ -208,6 +218,7 @@ namespace DLA
                     heights[x, y] = 1 - (1 / (1 + normWeight));
                 }
             }
+            return heights;
         }
     }
 }
