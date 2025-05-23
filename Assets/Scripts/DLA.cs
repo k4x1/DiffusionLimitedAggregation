@@ -102,7 +102,7 @@ namespace DLA {
                         float strength = Mathf.Exp(-2f * (dist / maxDist));
                         lock (mapLock) {
                             DLAmap[walkerPos.x, walkerPos.y] = true;
-                            heightMapData[walkerPos.x, walkerPos.y] =  strength;
+                            heightMapData[walkerPos.x, walkerPos.y] =  1;
                         }
                         stuckCount++;
                         if(stuckCount >= maxWalkers)
@@ -125,12 +125,12 @@ namespace DLA {
 
                 if (weightFalloff)
                 {
-                    int[,] weightMap = Utils.ComputeWeightMap(DLAmap, resolution);
+                    int[,] weightMap = Utils.ComputeWeightMap(DLAmap);
 
                     if (smoothHeights)
                     {
                         data = new float[resolution, resolution];
-                        Utils.ApplySmoothHeights(weightMap, resolution, ref data);
+                        data = Utils.ApplySmoothHeights(weightMap);
                     }
                 }
                 
