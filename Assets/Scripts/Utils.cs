@@ -139,7 +139,6 @@ namespace DLA
         {
             int res = map.GetLength(0); 
             int[,] weights = new int[res, res];
-            Queue<Vector2Int> boundaryQueue = new Queue<Vector2Int>();
 
             Vector2Int[] directions = new Vector2Int[] {
                 new Vector2Int(1,  0), // E
@@ -147,47 +146,25 @@ namespace DLA
                 new Vector2Int(0,  1), // N 
                 new Vector2Int(0, -1)  // S
             };
+
             for (int x = 0; x < res; x++)
             {
                 for (int y = 0; y < res; y++)
                 {
-                    if(!map[x, y]) continue;
-                    bool isBoundary = x == 0 || y == 0 || x == res - 1 || y == res - 1;
-                    for (int i = 0; !isBoundary && i < directions.Length; i++)
+                    if (!map[x, y]) continue;
+                    int canditate = 0;
+                    foreach (Vector2Int dir in directions)
                     {
-                        Vector2Int dir = directions[i];
-                        int newX = x + dir.x;
-                        int newY = y + dir.y;
-                        if (newX < 0 || newX >= res || newY < 0 || newY >= res || !map[newX, newY])
+                        int nx = x + dir.x;
+                        int ny = y + dir.y;
+                        if (nx < 0 || nx >= res || ny < 0 || ny >= res || !map[nx, ny])
                         {
-                            isBoundary = true;
+                            continue;   
                         }
+                        Debug.Log(weights[nx, ny]);
+                        canditate = canditate < weights[nx,ny] ? weights[nx,ny] : canditate;
                     }
-
-                    if (isBoundary)
-                    {
-                        weights[x, y] = 1;
-                        boundaryQueue.Enqueue(new Vector2Int(x, y));
-                    }
-                }
-            }
-            while (boundaryQueue.Count > 0)
-            {
-                Vector2Int popped = boundaryQueue.Dequeue();
-                int w = weights[popped.x, popped.y];
-                foreach(Vector2Int dir in directions)
-                {
-                    int newX = popped.x + dir.x;
-                    int newY = popped.y + dir.y;
-                    if (newX < 0 || newX >= res || newY < 0 || newY >= res) continue;
-
-                    if (!map[newX, newY]) continue;
-
-                    if (weights[newX, newY] < w + 1)
-                    {
-                        weights[newX, newY] = w + 1;
-                        boundaryQueue.Enqueue(new Vector2Int(newX, newY));
-                    }
+                    weights[x,y] = ++canditate;
                 }
             }
 
@@ -215,7 +192,7 @@ namespace DLA
                 {
                     float normWeight = weights[x, y] / (float)maxWeight;
 
-                    heights[x, y] = 1 - (1 / (1 + normWeight));
+                    heights[x, y] = normWeight; //1 - (1 / (1 + normWeight));
                 }
             }
             return heights;
