@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Security.Cryptography;
 using Unity.VisualScripting;
 using UnityEditor.Callbacks;
 using UnityEngine;
@@ -170,7 +171,12 @@ namespace DLA
 
             return weights;
         }
-
+        public static int[,] ComputeWeightMap1(Vector2Int[,] map)
+        {
+            int res = map.GetLength(0);
+            int[,] weights = new int[res, res];
+            return weights;
+        }
         public static float[,] ApplySmoothHeights(int[,] weights)
         {
             int res = weights.GetLength(0);

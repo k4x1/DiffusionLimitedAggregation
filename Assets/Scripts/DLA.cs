@@ -21,7 +21,9 @@ namespace DLA {
 
         public int radius = 30;
         public float standardDeviation = 20;
-        public bool[,] DLAmap;
+        public bool[,] DLAMap;
+        public Vector2Int[,] parentMap;
+
         float[,] heightMapData;
         List<Walker> walkers = new List<Walker>();
 
@@ -74,13 +76,17 @@ namespace DLA {
             StopAllCoroutines();
             walkers = new List<Walker>();
             heightMapData = new float[resolution, resolution];
-            DLAmap = new bool[resolution, resolution];
-       
-            DLAmap[resolution / 2, resolution / 2] = true;
+            
+            DLAMap = new bool[resolution, resolution];
+            DLAMap[resolution / 2, resolution / 2] = true;
+
+            parentMap = new Vector2Int[resolution, resolution];
+            parentMap[resolution / 2, resolution / 2] = new Vector2Int(-1, -1);
+
         }
         void InstantiateWalker()
         {
-            walkers.Add(new Walker(DLAmap));
+            walkers.Add(new Walker(DLAMap));
         }
         private void RunDLA(CancellationToken token)
         {
@@ -95,13 +101,15 @@ namespace DLA {
                     if (token.IsCancellationRequested) break;
                     if (walker.inPos) continue; // gotta update this to kill the walker at some point
 
-                    if (walker.StepWalker())
+                    Vector2Int walkerPos;
+                    Vector2Int walkerStuckDir;
+                    if (walker.StepWalker(out walkerPos, out walkerStuckDir))
                     {
-                        Vector2Int walkerPos = walker.GetPos();
+                        parentMap[walkerPos.x, walkerPos.y] = walkerPos - walkerStuckDir;
                         float dist = Vector2Int.Distance(walkerPos, new Vector2Int(centerX, centerY));
                         float strength = Mathf.Exp(-2f * (dist / maxDist));
                         lock (mapLock) {
-                            DLAmap[walkerPos.x, walkerPos.y] = true;
+                            DLAMap[walkerPos.x, walkerPos.y] = true;
                             heightMapData[walkerPos.x, walkerPos.y] =  1;
                         }
                         stuckCount++;
@@ -125,7 +133,7 @@ namespace DLA {
 
                 if (weightFalloff)
                 {
-                    int[,] weightMap = Utils.ComputeWeightMap(DLAmap);
+                    int[,] weightMap = Utils.ComputeWeightMap(DLAMap);
 
                     if (smoothHeights)
                     {

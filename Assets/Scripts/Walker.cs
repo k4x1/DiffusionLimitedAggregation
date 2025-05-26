@@ -14,6 +14,7 @@ namespace DLA
         public int maxSteps = 100;
         public int stepCount = 0;
         public Vector2Int dirToConnection;
+
         public Walker(bool[,] _map)
         {
             int seed;
@@ -26,8 +27,10 @@ namespace DLA
           //  pos = new Vector2Int(Random.Range(0, DLAmap.GetLength(0)), Random.Range(0, DLAmap.GetLength(1)));
             pos = new Vector2Int(rnd.Next(0,DLAmap.GetLength(0)), rnd.Next(0, DLAmap.GetLength(1)));
         }
-        public bool StepWalker()
+        public bool StepWalker(out Vector2Int stuckPos, out Vector2Int dirToConnection)
         {
+            stuckPos = Vector2Int.zero;
+            dirToConnection = Vector2Int.zero;
             int width = DLAmap.GetLength(0);
             int height = DLAmap.GetLength(1);
             Vector2Int offset = new Vector2Int(pos.x, pos.y);
@@ -52,6 +55,8 @@ namespace DLA
                 return true;
             }
             pos = newPos;
+            stuckPos = pos;
+            dirToConnection = offset;
             stepCount++;
             if (stepCount >= maxSteps)
             {
