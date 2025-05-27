@@ -20,6 +20,11 @@ namespace DLA
             if (GUILayout.Button("Stop DLA"))
             {
                 dlaRef.StopDLA();
+            }     
+            EditorGUILayout.Space();
+            if (GUILayout.Button("Do random util"))
+            {
+                dlaRef.RandomUtil();
             }
         }
     }

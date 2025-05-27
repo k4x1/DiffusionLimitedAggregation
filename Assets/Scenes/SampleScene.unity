@@ -618,8 +618,8 @@ MonoBehaviour:
   standardDeviation: 8
   autoExpose: 0
   blur: 0
-  weightFalloff: 0
-  smoothHeights: 0
+  weightFalloff: 1
+  smoothHeights: 1
 --- !u!154 &1560787788
 TerrainCollider:
   m_ObjectHideFlags: 0

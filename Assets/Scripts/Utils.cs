@@ -1,8 +1,5 @@
-using System;
+using System.Collections;
 using System.Collections.Generic;
-using System.Security.Cryptography;
-using Unity.VisualScripting;
-using UnityEditor.Callbacks;
 using UnityEngine;
 
 namespace DLA
@@ -171,12 +168,113 @@ namespace DLA
 
             return weights;
         }
-        public static int[,] ComputeWeightMap1(Vector2Int[,] map)
+        public static int[,] ComputeWeightMap1(Vector2Int[,] map, bool[,] DLAMap)
         {
             int res = map.GetLength(0);
             int[,] weights = new int[res, res];
+            for (int i = 0; i < res; i++){
+                for (int j = 0; j < res; j++)
+                {
+                    weights[i, j] = -1; 
+                }
+            }
+            int Compute(int x, int y)
+            {
+
+                if (!DLAMap[x, y])
+                {
+                    return weights[x, y] = 0; 
+                }
+
+                if (weights[x, y] >= 0)
+                {
+                    return weights[x, y];
+                }
+                Vector2Int dir = map[x, y];
+                if (dir.x < 0 || dir.y < 0)
+                {
+                    return weights[x, y] = 0;
+                }
+                int newWeight = Compute(dir.x, dir.y) + 1;
+                weights[x, y] = newWeight;
+                return newWeight;
+            }
+
+            for (int x = 0; x < res; x++)
+            {
+                for (int y = 0; y < res; y++)
+                {
+                    weights[x, y] = Compute(x, y);
+
+                } 
+            }
             return weights;
         }
+        public static int[,] CalculateWeights(bool[,] DLAmap, Dictionary<Vector2Int, Vector2Int> parentMap)
+        {
+            int res = DLAmap.GetLength(0);
+
+            Dictionary<Vector2Int, List<Vector2Int>> children = new Dictionary<Vector2Int, List<Vector2Int>>();
+            Dictionary<Vector2Int, int> inDegree = new Dictionary<Vector2Int, int>();
+
+            for (int x = 0; x < res; x++) { 
+                for (int y = 0; y < res; y++)
+                {
+                    if (!DLAmap[x, y]) continue;
+                    Vector2Int coord = new Vector2Int(x, y);
+                    children[coord] = new List<Vector2Int>();
+                    inDegree[coord] = 0;
+                }
+            }
+
+            foreach (var kv in parentMap)
+            {
+                Vector2Int child = kv.Key;
+                Vector2Int parent = kv.Value;
+                children[parent].Add(child);
+                inDegree[parent]++;
+            }
+
+            Queue<Vector2Int> queue = new Queue<Vector2Int>();
+            Dictionary<Vector2Int, int> weight = new Dictionary<Vector2Int, int>();
+            foreach (var kv in inDegree)
+            {
+                if (kv.Value == 0)
+                {
+                    queue.Enqueue(kv.Key);
+                    weight[kv.Key] = 1;
+                }
+            }
+
+            while (queue.Count > 0)
+            {
+                Vector2Int node = queue.Dequeue();
+
+                if (parentMap.TryGetValue(node, out Vector2Int parent))
+                {
+                    int candidate = weight[node] + 1;
+                    if (!weight.ContainsKey(parent) || weight[parent] < candidate)
+                    {
+                        weight[parent] = candidate;
+                    }
+
+                    inDegree[parent]--;
+                    if (inDegree[parent] == 0)
+                    { 
+                        queue.Enqueue(parent);
+                    }
+                }
+            }
+
+            int[,] result = new int[res, res];
+            foreach (var kv in weight)
+            {
+                result[kv.Key.x, kv.Key.y] = kv.Value;
+            }
+
+            return result;
+        }
+
         public static float[,] ApplySmoothHeights(int[,] weights)
         {
             int res = weights.GetLength(0);
@@ -198,7 +296,7 @@ namespace DLA
                 {
                     float normWeight = weights[x, y] / (float)maxWeight;
 
-                    heights[x, y] = normWeight; //1 - (1 / (1 + normWeight));
+                    heights[x, y] = 1 - (1 / (1 + normWeight));
                 }
             }
             return heights;

@@ -23,7 +23,7 @@ namespace DLA {
         public float standardDeviation = 20;
         public bool[,] DLAMap;
         public Vector2Int[,] parentMap;
-
+        private Dictionary<Vector2Int, Vector2Int> parentDict;
         float[,] heightMapData;
         List<Walker> walkers = new List<Walker>();
 
@@ -65,6 +65,7 @@ namespace DLA {
             cts.Token);
 
         }
+    
         public void StopDLA()
         {
             if (cts != null)
@@ -77,11 +78,13 @@ namespace DLA {
             walkers = new List<Walker>();
             heightMapData = new float[resolution, resolution];
             
+            parentDict = new Dictionary<Vector2Int, Vector2Int>();
+            Vector2Int root = new Vector2Int(resolution / 2, resolution / 2);
             DLAMap = new bool[resolution, resolution];
-            DLAMap[resolution / 2, resolution / 2] = true;
+            DLAMap[root.x, root.y] = true;
 
             parentMap = new Vector2Int[resolution, resolution];
-            parentMap[resolution / 2, resolution / 2] = new Vector2Int(-1, -1);
+            parentMap[root.x, root.y] = new Vector2Int(-1, -1);
 
         }
         void InstantiateWalker()
@@ -101,14 +104,13 @@ namespace DLA {
                     if (token.IsCancellationRequested) break;
                     if (walker.inPos) continue; // gotta update this to kill the walker at some point
 
-                    Vector2Int walkerPos;
-                    Vector2Int walkerStuckDir;
-                    if (walker.StepWalker(out walkerPos, out walkerStuckDir))
+                    if (walker.StepWalker(out Vector2Int walkerPos, out Vector2Int walkerStuckDir))
                     {
-                        parentMap[walkerPos.x, walkerPos.y] = walkerPos - walkerStuckDir;
                         float dist = Vector2Int.Distance(walkerPos, new Vector2Int(centerX, centerY));
                         float strength = Mathf.Exp(-2f * (dist / maxDist));
                         lock (mapLock) {
+                            parentDict[walkerPos] = walkerPos + walkerStuckDir;
+                            parentMap[walkerPos.x, walkerPos.y] = walkerPos + walkerStuckDir;
                             DLAMap[walkerPos.x, walkerPos.y] = true;
                             heightMapData[walkerPos.x, walkerPos.y] =  1;
                         }
@@ -129,33 +131,7 @@ namespace DLA {
             #if UNITY_EDITOR
             EditorApplication.delayCall += () =>
             {
-                float[,] data = heightMapData;
-
-                if (weightFalloff)
-                {
-                    int[,] weightMap = Utils.ComputeWeightMap(DLAMap);
-
-                    if (smoothHeights)
-                    {
-                        data = new float[resolution, resolution];
-                        data = Utils.ApplySmoothHeights(weightMap);
-                    }
-                }
-                
-                if (blur)
-                {
-                    data = Utils.GaussianBlur(data, radius, standardDeviation);
-                }
-                /* data = Utils.AddMultidimensionalFloats(data, Utils.GaussianBlur(heightMapData,Mathf.CeilToInt(radius*0.5f), standardDeviation*0.5f), 0.5f);
-                 data = Utils.AddMultidimensionalFloats(data, Utils.GaussianBlur(heightMapData, Mathf.CeilToInt(radius * 0.25f), standardDeviation * 0.25f), 0.3f);
-                data = Utils.MultiplyMultidimensionalFloats(data, 0.33333f);*/
-                if (autoExpose)
-                {
-                    data = Utils.AutoExpose(data);
-                }
-                terrain.terrainData.SetHeights(0, 0, data);
-                EditorUtility.SetDirty(terrain.terrainData);
-                Debug.Log("done normal tasks");
+                RandomUtil();
             };
             #else
 
@@ -164,8 +140,37 @@ namespace DLA {
          
 
         }
-        
-    
+
+        public void RandomUtil()
+        {
+            float[,] data = heightMapData;
+
+            if (weightFalloff)
+            {
+                int[,] weightMap = Utils.CalculateWeights(DLAMap,parentDict);
+
+                if (smoothHeights)
+                {
+                    data = new float[resolution, resolution];
+                    data = Utils.ApplySmoothHeights(weightMap);
+                }
+            }
+
+            if (blur)
+            {
+                data = Utils.GaussianBlur(data, radius, standardDeviation);
+            }
+            /* data = Utils.AddMultidimensionalFloats(data, Utils.GaussianBlur(heightMapData,Mathf.CeilToInt(radius*0.5f), standardDeviation*0.5f), 0.5f);
+             data = Utils.AddMultidimensionalFloats(data, Utils.GaussianBlur(heightMapData, Mathf.CeilToInt(radius * 0.25f), standardDeviation * 0.25f), 0.3f);
+            data = Utils.MultiplyMultidimensionalFloats(data, 0.33333f);*/
+            if (autoExpose)
+            {
+                data = Utils.AutoExpose(data);
+            }
+            terrain.terrainData.SetHeights(0, 0, data);
+            EditorUtility.SetDirty(terrain.terrainData);
+            Debug.Log("done normal tasks");
+        }
         private void OnDrawGizmos()
         {
             if (walkers.Count == 0) return;

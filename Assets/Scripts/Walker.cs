@@ -13,7 +13,7 @@ namespace DLA
         public bool inPos = false;
         public int maxSteps = 100;
         public int stepCount = 0;
-        public Vector2Int dirToConnection;
+        public Vector2Int directionToConnection;
 
         public Walker(bool[,] _map)
         {
@@ -50,13 +50,14 @@ namespace DLA
 
             if (DLAmap[newPos.x, newPos.y])
             {
+                stuckPos = pos;
                 dirToConnection = offset;
+                directionToConnection = offset;
                 inPos = true;
                 return true;
             }
             pos = newPos;
-            stuckPos = pos;
-            dirToConnection = offset;
+        
             stepCount++;
             if (stepCount >= maxSteps)
             {
