@@ -174,7 +174,6 @@ MonoBehaviour:
   autoExpose: 0
   blur: 0
   weightFalloff: 0
-  smoothHeights: 0
 --- !u!154 &277028963
 TerrainCollider:
   m_ObjectHideFlags: 0
@@ -614,12 +613,11 @@ MonoBehaviour:
   walkerCount: 50000
   maxWalkers: 50000
   terrain: {fileID: 1560787789}
-  radius: 24
-  standardDeviation: 8
-  autoExpose: 0
+  radius: 12
+  standardDeviation: 4
+  autoExpose: 1
   blur: 0
   weightFalloff: 1
-  smoothHeights: 1
 --- !u!154 &1560787788
 TerrainCollider:
   m_ObjectHideFlags: 0

@@ -36,6 +36,8 @@ namespace DLA {
         public bool blur = false;
         public bool weightFalloff = false;
 
+
+
         public void StartTaskDLA()
         {
 

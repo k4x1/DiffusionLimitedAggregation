@@ -1,5 +1,8 @@
+using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.IO;
+using Unity.VisualScripting.Dependencies.Sqlite;
 using UnityEngine;
 
 namespace DLA
@@ -85,8 +88,12 @@ namespace DLA
                 {
                     float point = map[x, y];
 
-                    if (point < minH) minH = point;
-                    if (point > maxH) maxH = point;
+                    if (point < minH) {
+                        minH = point;
+                    }
+                    if (point > maxH) {
+                        maxH = point;
+                    }
                 }
             }
 
@@ -136,11 +143,12 @@ namespace DLA
         public static int[,] CalculateWeights(bool[,] DLAmap, Dictionary<Vector2Int, Vector2Int> parentMap)
         {
             int res = DLAmap.GetLength(0);
-
+                
             Dictionary<Vector2Int, List<Vector2Int>> children = new Dictionary<Vector2Int, List<Vector2Int>>();
             Dictionary<Vector2Int, int> inDegree = new Dictionary<Vector2Int, int>();
 
-            for (int x = 0; x < res; x++) { 
+            for (int x = 0; x < res; x++)
+            {
                 for (int y = 0; y < res; y++)
                 {
                     if (!DLAmap[x, y]) continue;
@@ -183,7 +191,7 @@ namespace DLA
 
                     inDegree[parent]--;
                     if (inDegree[parent] == 0)
-                    { 
+                    {
                         queue.Enqueue(parent);
                     }
                 }
@@ -194,14 +202,14 @@ namespace DLA
             {
                 result[kv.Key.x, kv.Key.y] = kv.Value;
             }
-
+       
             return result;
         }
 
         public static float[,] ApplySmoothHeights(int[,] weights)
         {
             int res = weights.GetLength(0);
-            float[,] heights = new float[res,res];
+            float[,] heights = new float[res, res];
             int maxWeight = 0;
             for (int x = 0; x < res; x++)
             {
@@ -219,10 +227,12 @@ namespace DLA
                 {
                     float normWeight = weights[x, y] / (float)maxWeight;
 
-                    heights[x, y] = 1 - (1 / (1 + normWeight));
+                    heights[x, y] = Mathf.Pow(normWeight, 0.5f);
+                    //heights[x, y] = 1 - (1 / (1 + normWeight));
                 }
             }
             return heights;
         }
     }
+    
 }
