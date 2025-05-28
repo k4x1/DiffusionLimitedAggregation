@@ -35,7 +35,6 @@ namespace DLA {
         public bool autoExpose = false;
         public bool blur = false;
         public bool weightFalloff = false;
-        public bool smoothHeights = false;
 
         public void StartTaskDLA()
         {
@@ -74,17 +73,16 @@ namespace DLA {
                 cts.Dispose();
                 cts = null;
             }
-            StopAllCoroutines();
             walkers = new List<Walker>();
+
+            Vector2Int root = new Vector2Int(resolution / 2, resolution / 2);
+
             heightMapData = new float[resolution, resolution];
             
             parentDict = new Dictionary<Vector2Int, Vector2Int>();
-            Vector2Int root = new Vector2Int(resolution / 2, resolution / 2);
+
             DLAMap = new bool[resolution, resolution];
             DLAMap[root.x, root.y] = true;
-
-            parentMap = new Vector2Int[resolution, resolution];
-            parentMap[root.x, root.y] = new Vector2Int(-1, -1);
 
         }
         void InstantiateWalker()
@@ -102,15 +100,12 @@ namespace DLA {
             {
                 foreach(Walker walker in walkers) {
                     if (token.IsCancellationRequested) break;
-                    if (walker.inPos) continue; // gotta update this to kill the walker at some point
+                    if (walker.inPos) continue; 
 
                     if (walker.StepWalker(out Vector2Int walkerPos, out Vector2Int walkerStuckDir))
                     {
-                        float dist = Vector2Int.Distance(walkerPos, new Vector2Int(centerX, centerY));
-                        float strength = Mathf.Exp(-2f * (dist / maxDist));
                         lock (mapLock) {
                             parentDict[walkerPos] = walkerPos + walkerStuckDir;
-                            parentMap[walkerPos.x, walkerPos.y] = walkerPos + walkerStuckDir;
                             DLAMap[walkerPos.x, walkerPos.y] = true;
                             heightMapData[walkerPos.x, walkerPos.y] =  1;
                         }
@@ -149,20 +144,14 @@ namespace DLA {
             {
                 int[,] weightMap = Utils.CalculateWeights(DLAMap,parentDict);
 
-                if (smoothHeights)
-                {
-                    data = new float[resolution, resolution];
-                    data = Utils.ApplySmoothHeights(weightMap);
-                }
+                data = new float[resolution, resolution];
+                data = Utils.ApplySmoothHeights(weightMap);
             }
 
             if (blur)
             {
                 data = Utils.GaussianBlur(data, radius, standardDeviation);
             }
-            /* data = Utils.AddMultidimensionalFloats(data, Utils.GaussianBlur(heightMapData,Mathf.CeilToInt(radius*0.5f), standardDeviation*0.5f), 0.5f);
-             data = Utils.AddMultidimensionalFloats(data, Utils.GaussianBlur(heightMapData, Mathf.CeilToInt(radius * 0.25f), standardDeviation * 0.25f), 0.3f);
-            data = Utils.MultiplyMultidimensionalFloats(data, 0.33333f);*/
             if (autoExpose)
             {
                 data = Utils.AutoExpose(data);

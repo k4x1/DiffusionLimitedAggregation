@@ -22,7 +22,7 @@ namespace DLA
             {
                 seed = globalRnd.Next(); 
             }
-            rnd = new System.Random();
+            rnd = new System.Random(seed);
             DLAmap = _map;
           //  pos = new Vector2Int(Random.Range(0, DLAmap.GetLength(0)), Random.Range(0, DLAmap.GetLength(1)));
             pos = new Vector2Int(rnd.Next(0,DLAmap.GetLength(0)), rnd.Next(0, DLAmap.GetLength(1)));
