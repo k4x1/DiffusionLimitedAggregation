@@ -9,32 +9,59 @@ using System.Threading;
 using System.Threading.Tasks;
 using UnityEngine;
 using Debug = UnityEngine.Debug;
+using System.IO;
+using System;
 
 namespace DLA {
+
+    public enum DLAMode
+    {
+        Basic,
+        MultiResolution,
+        NoiseGuided,
+        ConvexHull
+    }
+
+
     [ExecuteInEditMode]
+
     public class DLA : MonoBehaviour
     {
+
+        [Header("DLA Mode")]
+        public DLAMode mode = DLAMode.Basic;
+
+        public Terrain terrain;
+        [Header("DLA settings")]
         public int resolution = 513;
         public int walkerCount = 10000;
         public int maxWalkers = 200;
-        public Terrain terrain;
 
-        public int radius = 30;
-        public float standardDeviation = 20;
-        public bool[,] DLAMap;
-        public Vector2Int[,] parentMap;
-        private Dictionary<Vector2Int, Vector2Int> parentDict;
-        float[,] heightMapData;
-        List<Walker> walkers = new List<Walker>();
-
-        private SynchronizationContext unityContext;
-        private CancellationTokenSource cts;
-        private object mapLock = new object();
-
-        [Header("settings")]
+        [Header("post proccessing options")]
         public bool autoExpose = false;
         public bool blur = false;
         public bool weightFalloff = false;
+
+        [Header("Blur settings")]
+        public int radius = 30;
+        public float standardDeviation = 20;
+
+        [Header("Smoothing settings")]
+        public float smoothPower = 0.5f;  // the lower this is the higher the lower bits are
+
+        
+        [HideInInspector] public bool[,] DLAMap;
+        [HideInInspector] public Vector2Int[,] parentMap;
+        [HideInInspector] Dictionary<Vector2Int, Vector2Int> parentDict;
+        [HideInInspector] float[,] heightMapData;
+        [HideInInspector] List<Walker> walkers = new List<Walker>();
+
+        [HideInInspector] SynchronizationContext unityContext;
+        [HideInInspector] CancellationTokenSource cts;
+        [HideInInspector] object mapLock = new object();
+        [HideInInspector] string dataPath { get { return Path.Combine(Application.persistentDataPath, "dlaData.bin"); } }
+
+
 
 
 
@@ -43,16 +70,36 @@ namespace DLA {
 
             StopDLA();
            
-            for (int i = 0; i < walkerCount; i++)
-            {
-                InstantiateWalker();
-            }
-            cts = new CancellationTokenSource();
 
             Stopwatch stopwatch = Stopwatch.StartNew();
 
             Task.Run(() => {
-                RunDLA(cts.Token);
+                switch (mode)
+                {
+                    case DLAMode.Basic:
+                        for (int i = 0; i < walkerCount; i++)
+                        {
+                            InstantiateWalker();
+                        }
+                        cts = new CancellationTokenSource();
+                        RunDLA(cts.Token);
+                        break;
+
+                    case DLAMode.MultiResolution:
+                        cts = new CancellationTokenSource();
+                        //RunMultiResolutionDLA(cts.Token);
+                        break;
+
+                    case DLAMode.NoiseGuided:
+                        cts = new CancellationTokenSource();
+                        //RunNoiseGuidedDLA(cts.Token);
+                        break;
+
+                    case DLAMode.ConvexHull:
+                        cts = new CancellationTokenSource();
+                        //RunConvexHullDLA(cts.Token);
+                        break;
+                }
                 stopwatch.Stop();
 #if UNITY_EDITOR
                 EditorApplication.delayCall += () =>
@@ -128,18 +175,26 @@ namespace DLA {
             #if UNITY_EDITOR
             EditorApplication.delayCall += () =>
             {
-                RandomUtil();
+                SaveDLAData();
+
+                PostProccessing();
             };
             #else
 
             #endif
 
-         
-
         }
 
-        public void RandomUtil()
+        public void PostProccessing()
         {
+            if (heightMapData == null || heightMapData.Length == 0)
+            {
+                if (!LoadDLAData())
+                {
+                    Debug.LogError("no saved data");
+                }
+            }
+
             float[,] data = heightMapData;
 
             if (weightFalloff)
@@ -147,7 +202,7 @@ namespace DLA {
                 int[,] weightMap = Utils.CalculateWeights(DLAMap,parentDict);
 
                 data = new float[resolution, resolution];
-                data = Utils.ApplySmoothHeights(weightMap);
+                data = Utils.ApplySmoothHeights(weightMap,smoothPower);
             }
 
             if (blur)
@@ -162,6 +217,98 @@ namespace DLA {
             EditorUtility.SetDirty(terrain.terrainData);
             Debug.Log("done normal tasks");
         }
+
+        public void SaveDLAData()
+        {
+            try
+            {
+                using (BinaryWriter bw = new BinaryWriter(File.Open(dataPath, FileMode.Create)))
+                {
+                    bw.Write(resolution);
+                    for (int x = 0; x < resolution; x++)
+                    {
+                        for (int y = 0; y < resolution; y++)
+                        {
+                            bw.Write(DLAMap[x, y]);
+                        }
+                    }
+                    bw.Write(parentDict.Count);
+                    foreach (var kv in parentDict)
+                    {
+                        bw.Write(kv.Key.x); bw.Write(kv.Key.y);
+                        bw.Write(kv.Value.x); bw.Write(kv.Value.y);
+                    }
+                    for (int x = 0; x < resolution; x++)
+                    {
+                        for (int y = 0; y < resolution; y++)
+                        {
+                            bw.Write(heightMapData[x, y]);
+                        }
+                    }
+                }
+                Debug.Log("saved DLA data to " + dataPath);
+            }
+            catch (Exception e)
+            {
+                Debug.LogError("error saving DLA data: " + e);
+            }
+        }
+
+        public bool LoadDLAData()
+        {
+            if (!File.Exists(dataPath)) return false;
+
+            try
+            {
+                using (BinaryReader br = new BinaryReader(File.Open(dataPath, FileMode.Open)))
+                {
+                    int fileRes = br.ReadInt32();
+                    if (fileRes != resolution)
+                    { 
+                        Debug.LogWarning($"saved res {fileRes} != real res {resolution}"); 
+                    }
+
+                    DLAMap = new bool[resolution, resolution];
+                    parentDict = new Dictionary<Vector2Int, Vector2Int>();
+                    heightMapData = new float[resolution, resolution];
+
+                    for (int x = 0; x < resolution; x++)
+                    {
+                        for (int y = 0; y < resolution; y++)
+                        {
+                            DLAMap[x, y] = br.ReadBoolean();
+                        }
+                    }
+                    int count = br.ReadInt32();
+                    for (int i = 0; i < count; i++)
+                    {
+                        int kx = br.ReadInt32();
+                        int ky = br.ReadInt32();
+
+                        int vx = br.ReadInt32();
+                        int vy = br.ReadInt32();
+
+                        parentDict[new Vector2Int(kx, ky)] = new Vector2Int(vx, vy);
+                    }
+                    // read heightMapData
+                    for (int x = 0; x < resolution; x++)
+                    {
+                        for (int y = 0; y < resolution; y++)
+                        {
+                            heightMapData[x, y] = br.ReadSingle();
+                        }
+                    }
+                }
+                Debug.Log("loaded DLA data from " + dataPath);
+                return true;
+            }
+            catch (Exception e)
+            {
+                Debug.LogError("error loading DLA data: " + e);
+                return false;
+            }
+        }
+
         private void OnDrawGizmos()
         {
             if (walkers.Count == 0) return;

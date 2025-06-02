@@ -122,7 +122,7 @@ namespace DLA
                 for (int j = 0; j < height; j++)
                 {
                     combined[i, j] = a[i, j] + b[i, j] * multiplicationFactorOfB;
-                }
+                }   
             }
             return combined;
         }
@@ -206,7 +206,7 @@ namespace DLA
             return result;
         }
 
-        public static float[,] ApplySmoothHeights(int[,] weights)
+        public static float[,] ApplySmoothHeights(int[,] weights, float smoothPower = 0.5f)
         {
             int res = weights.GetLength(0);
             float[,] heights = new float[res, res];
@@ -227,7 +227,7 @@ namespace DLA
                 {
                     float normWeight = weights[x, y] / (float)maxWeight;
 
-                    heights[x, y] = Mathf.Pow(normWeight, 0.5f);
+                    heights[x, y] = Mathf.Pow(normWeight, smoothPower);
                     //heights[x, y] = 1 - (1 / (1 + normWeight));
                 }
             }

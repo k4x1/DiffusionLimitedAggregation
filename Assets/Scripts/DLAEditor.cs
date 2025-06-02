@@ -22,9 +22,9 @@ namespace DLA
                 dlaRef.StopDLA();
             }     
             EditorGUILayout.Space();
-            if (GUILayout.Button("Do random util"))
+            if (GUILayout.Button("Do post proccessing"))
             {
-                dlaRef.RandomUtil();
+                dlaRef.PostProccessing();
             }
         }
     }
