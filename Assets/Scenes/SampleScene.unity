@@ -165,15 +165,19 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: adcb1d7e6d4a2d043a5222a0d5abdbb8, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  terrain: {fileID: 277028964}
   resolution: 513
   walkerCount: 50000
   maxWalkers: 50000
-  terrain: {fileID: 277028964}
-  radius: 24
-  standardDeviation: 8
+  baseSize: 0
+  fillFraction: 0
   autoExpose: 0
   blur: 0
   weightFalloff: 0
+  radius: 24
+  standardDeviation: 8
+  smoothPower: 0.5
+  mode: 0
 --- !u!154 &277028963
 TerrainCollider:
   m_ObjectHideFlags: 0
@@ -572,9 +576,9 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 1560787786}
+  - component: {fileID: 1560787787}
   - component: {fileID: 1560787789}
   - component: {fileID: 1560787788}
-  - component: {fileID: 1560787787}
   m_Layer: 0
   m_Name: Terrain_0_0_229d1cab-aac0-4935-b513-dc811c56fc68
   m_TagString: Untagged
@@ -609,15 +613,19 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: adcb1d7e6d4a2d043a5222a0d5abdbb8, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  terrain: {fileID: 1560787789}
   resolution: 513
   walkerCount: 50000
   maxWalkers: 50000
-  terrain: {fileID: 1560787789}
-  radius: 12
-  standardDeviation: 4
-  autoExpose: 1
+  baseSize: 256
+  fillFraction: 0.1
+  autoExpose: 0
   blur: 0
-  weightFalloff: 1
+  weightFalloff: 0
+  radius: 36
+  standardDeviation: 12
+  smoothPower: 0.5
+  mode: 1
 --- !u!154 &1560787788
 TerrainCollider:
   m_ObjectHideFlags: 0

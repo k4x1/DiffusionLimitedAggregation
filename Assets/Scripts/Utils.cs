@@ -123,7 +123,7 @@ namespace DLA
                 for (int j = 0; j < height; j++)
                 {
                     combined[i, j] = a[i, j] + b[i, j] * multiplicationFactorOfB;
-                }   
+                }
             }
             return combined;
         }
@@ -144,7 +144,7 @@ namespace DLA
         public static int[,] CalculateWeights(bool[,] DLAmap, Dictionary<Vector2Int, Vector2Int> parentMap)
         {
             int res = DLAmap.GetLength(0);
-                
+
             Dictionary<Vector2Int, List<Vector2Int>> children = new Dictionary<Vector2Int, List<Vector2Int>>();
             Dictionary<Vector2Int, int> inDegree = new Dictionary<Vector2Int, int>();
 
@@ -203,7 +203,78 @@ namespace DLA
             {
                 result[kv.Key.x, kv.Key.y] = kv.Value;
             }
-       
+
+            return result;
+        }
+        public static int[,] CalculateWeights(Vector2Int[,] dirMap)
+        {
+            int res = dirMap.GetLength(0);
+
+            Dictionary<Vector2Int, List<Vector2Int>> children = new Dictionary<Vector2Int, List<Vector2Int>>();
+            Dictionary<Vector2Int, int> inDegree = new Dictionary<Vector2Int, int>();
+
+            for (int x = 0; x < res; x++)
+            {
+                for (int y = 0; y < res; y++)
+                {
+                    if (dirMap[x, y] == SENTINEL) continue;
+                    Vector2Int coord = new Vector2Int(x, y);
+                    children[coord] = new List<Vector2Int>();
+                    inDegree[coord] = 0;
+                }
+            }
+
+            foreach (var kv in children)
+            {
+                Vector2Int child = kv.Key;
+                Vector2Int offset = dirMap[child.x,child.y];
+                if (offset == Vector2Int.zero) continue;
+                Vector2Int parent = new Vector2Int(child.x + offset.x, child.y + offset.y);
+                if (!children.ContainsKey(parent)) continue;
+
+                children[parent].Add(child);
+                inDegree[parent] = inDegree[parent] + 1;
+            }
+
+            Queue<Vector2Int> queue = new Queue<Vector2Int>();
+            Dictionary<Vector2Int, int> weight = new Dictionary<Vector2Int, int>();
+            foreach (var kv in inDegree)
+            {
+                if (kv.Value == 0)
+                {
+                    queue.Enqueue(kv.Key);
+                    weight[kv.Key] = 1;
+                }
+            }
+
+            while (queue.Count > 0)
+            {
+
+                Vector2Int node = queue.Dequeue();
+                Vector2Int dir = dirMap[node.x, node.y];
+
+                if (dir == SENTINEL)  continue;
+                if (dir == Vector2Int.zero) continue;
+
+                Vector2Int parent = new Vector2Int(node.x + dir.x, node.y + dir.y);
+                if (!weight.ContainsKey(parent) || weight[parent] < weight[node] + 1)
+                {
+                    weight[parent] = weight[node] + 1;
+                }
+
+                inDegree[parent] = inDegree[parent] - 1;
+                if (inDegree[parent] == 0)
+                {
+                    queue.Enqueue(parent);
+                }
+            }
+
+            int[,] result = new int[res, res];
+            foreach (var kv in weight)
+            {
+                result[kv.Key.x, kv.Key.y] = kv.Value;
+            }
+
             return result;
         }
 
@@ -239,7 +310,7 @@ namespace DLA
             List<int> levels = new List<int>();
             int current = baseSize;
             levels.Add(current);
-            while (current*2 <= finalSize)
+            while (current * 2 <= finalSize)
             {
                 current *= 2;
                 levels.Add(current);
@@ -313,69 +384,95 @@ namespace DLA
                 for (int y = 0; y < newSize; y++)
                 {
                     if (crispNN[x, y])
-                    { 
-                        blurry[x, y] = crispHeight[x, y]; 
+                    {
+                        blurry[x, y] = crispHeight[x, y];
                     }
                 }
             }
         }
 
-        public static Vector2Int[,] BuildDirectionMap(bool[,] oldBoolMap, Dictionary<Vector2Int, Vector2Int> parentDict)
+
+
+        public static Vector2Int[,] UpscaleDirectionMap(Vector2Int[,] map, int newSize, int jitterMax = 0)
         {
-            int oldSize = oldBoolMap.GetLength(0);
-            Vector2Int[,] dirMap = new Vector2Int[oldSize, oldSize];
+            int oldSize = map.GetLength(0);
+            int scaleFactor = newSize / oldSize;
 
-            for (int i = 0; i < oldSize; i++)
+            Vector2Int[,] newMap = new Vector2Int[newSize, newSize];
+            for (int i = 0; i < newSize; i++)
             {
-                for (int j = 0; j < oldSize; j++)
+                for (int j = 0; j < newSize; j++)
                 {
-                    dirMap[i, j] = SENTINEL;
+                    newMap[i, j] = SENTINEL;
                 }
-            }
-            // init to impossible value 
-
-            foreach (var kv in parentDict)
-            {
-                Vector2Int child = kv.Key;
-                Vector2Int parent = kv.Value;
-                Vector2Int offset = parent - child;
-                dirMap[child.x, child.y] = offset;
-                //gets offset
             }
 
             for (int x = 0; x < oldSize; x++)
             {
                 for (int y = 0; y < oldSize; y++)
                 {
-                    if (oldBoolMap[x, y] && !parentDict.ContainsKey(new Vector2Int(x, y)))
+                    Vector2Int oldOffset = map[x, y];
+                    if (oldOffset == SENTINEL) continue;
+                
+                    int childX = x * scaleFactor;
+                    int childY = y * scaleFactor;
+
+                    if (oldOffset == Vector2Int.zero)
                     {
-                        dirMap[x, y] = Vector2Int.zero;
-                        //sets root dir
+                        newMap[childX, childY] = Vector2Int.zero;
                     }
+
+                    int parentX = childX + oldOffset.x * scaleFactor;
+                    int parentY = childY + oldOffset.y * scaleFactor;
+
+
+                    int midX = (childX + parentX) / 2;
+                    int midY = (childY + parentY) / 2;
+
+
+
+                    int dx1 = midX - childX;
+                    int dy1 = midY - childY;
+                    newMap[childX, childY] = new Vector2Int(dx1, dy1);
+
+                    int dx2 = parentX - midX;
+                    int dy2 = parentY - midY;
+                    newMap[midX, midY] = new Vector2Int(dx2, dy2);
+
+                   /* int jitteredMidX = midX + 1;// UnityEngine.Random.Range(-jitterMax, jitterMax + 1);
+                    int jitteredMidY = midY + 1;// UnityEngine.Random.Range(-jitterMax, jitterMax + 1);
+
+                    if (jitteredMidX < 0) 
+                    {
+                        jitteredMidX = 0; 
+                    }
+                    else if (jitteredMidX >= newSize)
+                    {
+                        jitteredMidX = newSize - 1; 
+                    }
+                    if (jitteredMidY < 0) 
+                    {
+                        jitteredMidY = 0; 
+                    }
+                    else if (jitteredMidY >= newSize)
+                    {
+                        jitteredMidY = newSize - 1;
+                    }
+
+                    int dx1 = jitteredMidX - childX;
+                    int dy1 = jitteredMidY - childY;
+                    newMap[childX, childY] = new Vector2Int(dx1, dy1);
+
+                    int dx2 = childX - jitteredMidX;
+                    int dy2 = childY - jitteredMidY;
+                    newMap[jitteredMidX, jitteredMidY] = new Vector2Int(dx2, dy2);*/
+
                 }
             }
-
-            return dirMap;
+            return newMap;
         }
-        public static Vector2Int[,] UpscaleDirectionMap(Vector2Int[,] oldDir,int newSize)
-        {
-            int oldSize = oldDir.GetLength(0);
-            Vector2Int[,] newDir = new Vector2Int[newSize, newSize];
-            float scale = (float)oldSize / newSize;
 
-            for (int x = 0; x < newSize; x++)
-            {
-                for (int y = 0; y < newSize; y++)
-                {
-                    int oldX = Mathf.FloorToInt(x * scale);
-                    int oldY = Mathf.FloorToInt(y * scale);
-                    // scales map
-                    newDir[x, y] = oldDir[oldX, oldY];
-                }
-            }
-
-            return newDir;
-        }
+         
         public static bool[,] BuildMapFromDirections(Vector2Int[,] upscaledDir)
         {
             int newSize = upscaledDir.GetLength(0);
@@ -391,7 +488,40 @@ namespace DLA
 
             return boolMap;
         }
+        public static Dictionary<Vector2Int, Vector2Int> UpscaleConnections(
+       Dictionary<Vector2Int, Vector2Int> oldConnections,
+       int oldSize,
+       int newSize
+   )
+        {
+            int scaleFactor = newSize / oldSize;
+            Dictionary<Vector2Int, Vector2Int> newConnections = new Dictionary<Vector2Int, Vector2Int>(oldConnections.Count * (scaleFactor * scaleFactor));
 
+            foreach (var kvp in oldConnections)
+            {
+                Vector2Int oldChild = kvp.Key;
+                Vector2Int oldParent = kvp.Value;
+
+                Vector2Int childBlockOrigin = new Vector2Int(oldChild.x * scaleFactor, oldChild.y * scaleFactor);
+                Vector2Int parentBlockOrigin = new Vector2Int(oldParent.x * scaleFactor, oldParent.y * scaleFactor);
+
+                Vector2Int newChild = childBlockOrigin;
+                Vector2Int delta = childBlockOrigin - parentBlockOrigin;
+                Vector2Int newMiddle = parentBlockOrigin + new Vector2Int(
+                    delta.x / 2,
+                    delta.y / 2
+                );
+                Vector2Int newParent = parentBlockOrigin;
+
+                newConnections[newMiddle] = newParent;
+                newConnections[newChild] = newMiddle;
+
+            }
+
+
+
+            return newConnections;
+        }
     }
 
 

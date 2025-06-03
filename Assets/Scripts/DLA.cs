@@ -186,30 +186,27 @@ namespace DLA {
 
             Stopwatch stopwatch = Stopwatch.StartNew();
             int[] levels = Utils.ComputeLevels(baseSize, resolution);
-            // 64 128 256 512
             int currentSize = levels[0];
             walkers = new List<Walker>();
             Vector2Int root = new Vector2Int(baseSize / 2, baseSize / 2);
             heightMapData = new float[baseSize, baseSize];
-            Debug.Log("asas");
+            parentMap = new Vector2Int[baseSize, baseSize];
             heightMapData[root.x, root.y] = 1f;
-            parentMap[baseSize/2, baseSize/2] = new Vector2Int(0,0);
             for (int x = 0; x < baseSize; x++)
             {
                 for (int y = 0; y < baseSize; y++)
                 {
-                    
-
                     parentMap[x, y] = Utils.SENTINEL;
                 }
             }
+            parentMap[baseSize/2, baseSize/2] = new Vector2Int(0,0);
+            
             parentDict = new Dictionary<Vector2Int, Vector2Int>();
             DLAMap = new bool[baseSize, baseSize];
             DLAMap[root.x, root.y] = true;
 
             for (int i = 0; i < levels.Length - 1; i++)
             {
-                Debug.Log(levels[i]);
                 if (token.IsCancellationRequested) return;
 
                 int size = levels[i];
@@ -218,18 +215,20 @@ namespace DLA {
                 int walkersToAdd = Mathf.FloorToInt(fillFraction * size * size);
                 RunDLALevel(size, walkersToAdd, token);
 
+                Debug.Log("upscale work");
                 Vector2Int[,] upscaledDir = Utils.UpscaleDirectionMap(parentMap, nextSize);
+                Debug.Log("upscale work1");
                 bool[,] crispUpscale = Utils.BuildMapFromDirections(upscaledDir);
-
-                /*             int[,] weightMap = Utils.CalculateWeights(DLAMap, parentDict);
-                             float[,] crispHeight = Utils.ApplySmoothHeights(weightMap, smoothPower);*/
+                Debug.Log("upscale work12");
+                int[,] weightMap = Utils.CalculateWeights(parentMap);
+                float[,] crispHeight = Utils.ApplySmoothHeights(weightMap, smoothPower);
 
                 float[,] newBlurry = Utils.UpscaleBilinear(heightMapData, nextSize);
                 newBlurry = Utils.DualFilterBlur(newBlurry, radius, standardDeviation);
 
-                /*float[,] crispHeightNN = Utils.UpscaleBilinear(crispHeight, nextSize);
+                float[,] crispHeightNN = Utils.UpscaleBilinear(crispHeight, nextSize);
 
-                Utils.MergeCrispIntoBlurry(crispUpscale, crispHeightNN, newBlurry);*/
+                Utils.MergeCrispIntoBlurry(crispUpscale, crispHeightNN, newBlurry);
 
                 currentSize = nextSize;
                 DLAMap = crispUpscale;
@@ -241,8 +240,8 @@ namespace DLA {
 #if UNITY_EDITOR
             EditorApplication.delayCall += () =>
             {
-               // SaveDLAData();
-               // PostProccessing();
+                SaveDLAData();
+                PostProccessing();
                 stopwatch.Stop();
                 Debug.Log($"[MultiRes DLA] Total Time: {stopwatch.Elapsed.TotalSeconds:F3}s | final res {resolution}");
             };
@@ -254,16 +253,16 @@ namespace DLA {
         private void RunDLALevel(int size, int walkersToAdd, CancellationToken token)
         {
             int stuckCount = 0;
-            List<Walker> localWalkers = new List<Walker>();
+            walkers = new List<Walker>();
 
             for (int i = 0; i < walkersToAdd; i++)
             {
-                localWalkers.Add(new Walker(DLAMap)); 
+                walkers.Add(new Walker(DLAMap)); 
             }
 
             while (stuckCount < walkersToAdd && !token.IsCancellationRequested)
             {
-                foreach (Walker walker in localWalkers)
+                foreach (Walker walker in walkers)
                 {
                     if (walker.inPos) continue;
                     if (walker.StepWalker(out Vector2Int walkerPos, out Vector2Int walkerStuckDir))
@@ -321,10 +320,11 @@ namespace DLA {
             {
                 using (BinaryWriter bw = new BinaryWriter(File.Open(dataPath, FileMode.Create)))
                 {
-                    bw.Write(resolution);
-                    for (int x = 0; x < resolution; x++)
+                    int res = DLAMap.GetLength(0);
+                    bw.Write(res);
+                    for (int x = 0; x < res; x++)
                     {
-                        for (int y = 0; y < resolution; y++)
+                        for (int y = 0; y < res; y++)
                         {
                             bw.Write(DLAMap[x, y]);
                         }
@@ -335,9 +335,9 @@ namespace DLA {
                         bw.Write(kv.Key.x); bw.Write(kv.Key.y);
                         bw.Write(kv.Value.x); bw.Write(kv.Value.y);
                     }
-                    for (int x = 0; x < resolution; x++)
+                    for (int x = 0; x < res; x++)
                     {
-                        for (int y = 0; y < resolution; y++)
+                        for (int y = 0; y < res; y++)
                         {
                             bw.Write(heightMapData[x, y]);
                         }
@@ -405,15 +405,7 @@ namespace DLA {
             }
         }
 
-     /*   private void OnDrawGizmos()
-        {
-            if (walkers.Count == 0) return;
-            foreach (Walker walker in walkers) {
-                if (walker == null) continue;
-                Gizmos.color = walker.inPos ? new Color(0,1,0,0.5f) : new Color(1, 0, 0, 0.5f);
-                Gizmos.DrawCube(new Vector3(walker.GetPos().x,30, walker.GetPos().y) , Vector3.one);
-            }
-        }*/
+ 
         private void OnDrawGizmos()
         {
             if (DLAMap != null)
@@ -440,50 +432,22 @@ namespace DLA {
                     {
                         for (int y = 0; y < size; y++)
                         {
+                            if (parentMap[x, y] == Utils.SENTINEL) continue;
                             Vector3 worldPos = new Vector3(x, 101f, y);
-                            Vector3 endPos = new Vector3(worldPos.x + parentMap[x, y].x, 101f, worldPos.y + parentMap[x, y].y);
+                            Vector3 endPos = new Vector3(x + parentMap[x, y].x, 101f, y + parentMap[x, y].y);
                             Gizmos.DrawLine(worldPos, endPos);
                         }
                     }
                 }
-               /* if (parentDict != null)
-                {
-                    var entriesSnapshot = parentDict.ToList();  
-                    Gizmos.color = Color.cyan;
-                    foreach (var kv in entriesSnapshot)
-                    {
-                        Vector2Int child = kv.Key;
-                        Vector2Int parent = kv.Value;
-
-                        Vector3 childPos = new Vector3(child.x, 101f, child.y);
-                        Vector3 parentPos = new Vector3(parent.x, 101f, parent.y);
-
-                        Gizmos.DrawLine(childPos, parentPos);
-                    }
-                }*/
-            }
-          /*  if (walkers != null)
-            {
+                if (walkers.Count == 0) return;
                 foreach (Walker walker in walkers)
                 {
-                    if (walker == null) continue;
-
-                    Vector2Int pos2d = walker.GetPos();
-                    Vector3 worldPos = new Vector3(pos2d.x, 0f, pos2d.y);
-                    float walkerSize = 0.3f;
-
-                    if (walker.inPos)
-                    {
-                        Gizmos.color = new Color(0f, 1f, 0f, 0.8f); 
-                    }
-                    else
-                    { 
-                        Gizmos.color = new Color(1f, 0f, 0f, 0.8f);
-                    }
-
-                    Gizmos.DrawCube(worldPos + Vector3.up * (walkerSize * 0.5f), Vector3.one * walkerSize);
+                    if (walker == null|| walker.inPos) continue;
+                    Gizmos.color =new Color(0, 1, 0, 0.5f);
+                    Gizmos.DrawCube(new Vector3(walker.GetPos().x, 100, walker.GetPos().y), Vector3.one);
                 }
-            }*/
+            }
+         
         }
     }
    

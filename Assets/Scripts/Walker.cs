@@ -45,7 +45,7 @@ namespace DLA
           //  pos = new Vector2Int(Random.Range(0, DLAmap.GetLength(0)), Random.Range(0, DLAmap.GetLength(1)));
             pos = new Vector2Int(rnd.Next(0,DLAmap.GetLength(0)), rnd.Next(0, DLAmap.GetLength(1)));
         }
-        public bool StepWalker(out Vector2Int stuckPos, out Vector2Int dirToConnection, bool diagonal = false)
+        public bool StepWalker(out Vector2Int stuckPos, out Vector2Int dirToConnection, bool diagonal = true)
         {
             stuckPos = Vector2Int.zero;
             dirToConnection = Vector2Int.zero;
