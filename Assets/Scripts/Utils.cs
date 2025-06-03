@@ -9,6 +9,7 @@ namespace DLA
 {
     static class Utils
     {
+        public static readonly Vector2Int SENTINEL = new Vector2Int(int.MinValue, int.MinValue);
         public static float[,] GaussianBlur(float[,] toBlur, int radius, float standardDeviation)
         {
             int width = toBlur.GetLength(0);
@@ -233,6 +234,165 @@ namespace DLA
             }
             return heights;
         }
+        public static int[] ComputeLevels(int baseSize, int finalSize)
+        {
+            List<int> levels = new List<int>();
+            int current = baseSize;
+            levels.Add(current);
+            while (current*2 <= finalSize)
+            {
+                current *= 2;
+                levels.Add(current);
+            }
+            return levels.ToArray();
+        }
+        public static bool[,] UpscaleNearest(bool[,] map, int newSize)
+        {
+            int oldSize = map.GetLength(0);
+            bool[,] result = new bool[newSize, newSize];
+            float scale = (float)oldSize / newSize;
+
+            for (int x = 0; x < newSize; x++)
+            {
+                for (int y = 0; y < newSize; y++)
+                {
+                    int mapX = Mathf.FloorToInt(x * scale);
+                    int mapY = Mathf.FloorToInt(y * scale);
+                    result[x, y] = map[mapX, mapY];
+                }
+            }
+            return result;
+        }
+        public static float[,] UpscaleBilinear(float[,] map, int newSize)
+        {
+            int oldSize = map.GetLength(0);
+            float[,] result = new float[newSize, newSize];
+            float scale = (oldSize - 1f) / (newSize - 1f);
+
+            for (int i = 0; i < newSize; i++)
+            {
+                for (int j = 0; j < newSize; j++)
+                {
+                    float mapPosX = i * scale;
+                    float mapPosY = j * scale;
+                    int x0 = Mathf.FloorToInt(mapPosX);
+                    int y0 = Mathf.FloorToInt(mapPosY);
+                    int x1 = Mathf.Min(x0 + 1, oldSize - 1);
+                    int y1 = Mathf.Min(y0 + 1, oldSize - 1);
+
+                    float fracOffsetX = mapPosX - x0;
+                    float fracOffsetY = mapPosY - y0;
+
+                    float topLeft = map[x0, y0];
+                    float topRight = map[x1, y0];
+                    float bottomLeft = map[x0, y1];
+                    float bottomRight = map[x1, y1];
+
+                    float topInterp = topLeft * (1 - fracOffsetX) + topRight * fracOffsetX;
+                    float botInterp = bottomLeft * (1 - fracOffsetX) + bottomRight * fracOffsetX;
+
+                    result[i, j] = topInterp * (1 - fracOffsetY) + botInterp * fracOffsetY;
+                }
+            }
+            return result;
+        }
+        public static float[,] DualFilterBlur(float[,] map, int radius, float standardDeviation)
+        {
+            int size = map.GetLength(0);
+            int half = size / 2;
+            float[,] down = UpscaleBilinear(map, half);
+            float[,] blurredDown = GaussianBlur(down, radius, standardDeviation);
+            float[,] result = UpscaleBilinear(blurredDown, size);
+            return result;
+        }
+        public static void MergeCrispIntoBlurry(bool[,] crispNN, float[,] crispHeight, float[,] blurry)
+        {
+            int newSize = blurry.GetLength(0);
+            for (int x = 0; x < newSize; x++)
+            {
+                for (int y = 0; y < newSize; y++)
+                {
+                    if (crispNN[x, y])
+                    { 
+                        blurry[x, y] = crispHeight[x, y]; 
+                    }
+                }
+            }
+        }
+
+        public static Vector2Int[,] BuildDirectionMap(bool[,] oldBoolMap, Dictionary<Vector2Int, Vector2Int> parentDict)
+        {
+            int oldSize = oldBoolMap.GetLength(0);
+            Vector2Int[,] dirMap = new Vector2Int[oldSize, oldSize];
+
+            for (int i = 0; i < oldSize; i++)
+            {
+                for (int j = 0; j < oldSize; j++)
+                {
+                    dirMap[i, j] = SENTINEL;
+                }
+            }
+            // init to impossible value 
+
+            foreach (var kv in parentDict)
+            {
+                Vector2Int child = kv.Key;
+                Vector2Int parent = kv.Value;
+                Vector2Int offset = parent - child;
+                dirMap[child.x, child.y] = offset;
+                //gets offset
+            }
+
+            for (int x = 0; x < oldSize; x++)
+            {
+                for (int y = 0; y < oldSize; y++)
+                {
+                    if (oldBoolMap[x, y] && !parentDict.ContainsKey(new Vector2Int(x, y)))
+                    {
+                        dirMap[x, y] = Vector2Int.zero;
+                        //sets root dir
+                    }
+                }
+            }
+
+            return dirMap;
+        }
+        public static Vector2Int[,] UpscaleDirectionMap(Vector2Int[,] oldDir,int newSize)
+        {
+            int oldSize = oldDir.GetLength(0);
+            Vector2Int[,] newDir = new Vector2Int[newSize, newSize];
+            float scale = (float)oldSize / newSize;
+
+            for (int x = 0; x < newSize; x++)
+            {
+                for (int y = 0; y < newSize; y++)
+                {
+                    int oldX = Mathf.FloorToInt(x * scale);
+                    int oldY = Mathf.FloorToInt(y * scale);
+                    // scales map
+                    newDir[x, y] = oldDir[oldX, oldY];
+                }
+            }
+
+            return newDir;
+        }
+        public static bool[,] BuildMapFromDirections(Vector2Int[,] upscaledDir)
+        {
+            int newSize = upscaledDir.GetLength(0);
+            bool[,] boolMap = new bool[newSize, newSize];
+
+            for (int x = 0; x < newSize; x++)
+            {
+                for (int y = 0; y < newSize; y++)
+                {
+                    boolMap[x, y] = upscaledDir[x, y] != SENTINEL;
+                }
+            }
+
+            return boolMap;
+        }
+
     }
-    
+
+
 }

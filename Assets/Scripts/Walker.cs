@@ -3,7 +3,25 @@ namespace DLA
 {
     public class Walker
     {
+        private static readonly Vector2Int[] directions = new Vector2Int[]
+{
+            new Vector2Int( 1,  0),
+            new Vector2Int(-1,  0),
+            new Vector2Int( 0,  1),
+            new Vector2Int( 0, -1),
+};
+        private static readonly Vector2Int[] diagonalDirections = new Vector2Int[]
+        {
+            new Vector2Int( 1,  0),
+            new Vector2Int(-1,  0),
+            new Vector2Int( 0,  1),
+            new Vector2Int( 0, -1),
 
+            new Vector2Int( 1,  1),
+            new Vector2Int( 1, -1),
+            new Vector2Int(-1,  1),
+            new Vector2Int(-1, -1),
+        };
         private static readonly object rndLock = new object();
         private static readonly System.Random globalRnd = new System.Random();
         private readonly System.Random rnd;
@@ -27,26 +45,21 @@ namespace DLA
           //  pos = new Vector2Int(Random.Range(0, DLAmap.GetLength(0)), Random.Range(0, DLAmap.GetLength(1)));
             pos = new Vector2Int(rnd.Next(0,DLAmap.GetLength(0)), rnd.Next(0, DLAmap.GetLength(1)));
         }
-        public bool StepWalker(out Vector2Int stuckPos, out Vector2Int dirToConnection)
+        public bool StepWalker(out Vector2Int stuckPos, out Vector2Int dirToConnection, bool diagonal = false)
         {
             stuckPos = Vector2Int.zero;
             dirToConnection = Vector2Int.zero;
             int width = DLAmap.GetLength(0);
             int height = DLAmap.GetLength(1);
-            Vector2Int offset = new Vector2Int(pos.x, pos.y);
-            do
-            {
-                int dx = rnd.Next(-1, 2);
-                int dy = rnd.Next(-1, 2);
-                //offset = new Vector2Int(Random.Range(-1, 2), Random.Range(-1, 2));
-                offset = new Vector2Int(dx, dy);
-            }
-            while (offset == Vector2Int.zero);
+            Vector2Int[] choices = diagonal
+            ? diagonalDirections
+            : directions;
+
+            Vector2Int offset = choices[rnd.Next(choices.Length)];
 
             Vector2Int newPos = pos + offset;
 
-            if (newPos.x < 0 || newPos.x >= width || newPos.y < 0 || newPos.y >= height)
-                return false;
+            if (newPos.x < 0 || newPos.x >= width || newPos.y < 0 || newPos.y >= height) return false;
 
             if (DLAmap[newPos.x, newPos.y])
             {
