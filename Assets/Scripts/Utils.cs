@@ -280,8 +280,7 @@ namespace DLA
 
             return result;
         }
-
-        public static float[,] ApplySmoothHeights(int[,] weights, float smoothPower = 0.5f)
+        public static float[,] ApplySmoothHeights(int[,] weights, float smoothPower = 0.5f, bool power = true)
         {
             int res = weights.GetLength(0);
             float[,] heights = new float[res, res];
@@ -302,8 +301,7 @@ namespace DLA
                 {
                     float normWeight = weights[x, y] / (float)maxWeight;
 
-                    heights[x, y] = Mathf.Pow(normWeight, smoothPower);
-                    //heights[x, y] = 1 - (1 / (1 + normWeight));
+                    heights[x, y] = power ? Mathf.Pow(normWeight, smoothPower) : 1 - (1 / (1 + normWeight));
                 }
             }
             return heights;
@@ -376,22 +374,14 @@ namespace DLA
                 }
             }
         }
-
-
-
         public static Vector2Int[,] UpscaleDirectionMap(Vector2Int[,] map, int newSize)
         {
-
             int oldSize = map.GetLength(0);
             int scaleFactor = newSize / oldSize;
-            int seed;
-            lock (rndLock)
+            if (newSize % oldSize != 0)
             {
-                seed = globalRnd.Next();
+                Debug.LogError("error in upscale, size isnt right");
             }
-            System.Random rnd = new System.Random(seed);
-            const float jitterRadius = 0.5f;
-
             Vector2Int[,] newMap = new Vector2Int[newSize, newSize];
             for (int i = 0; i < newSize; i++)
             {
@@ -406,48 +396,77 @@ namespace DLA
                 for (int y = 0; y < oldSize; y++)
                 {
                     Vector2Int oldOffset = map[x, y];
+                    
                     if (oldOffset == SENTINEL) continue;
 
                     int childX = x * scaleFactor;
                     int childY = y * scaleFactor;
 
+                    if (oldOffset == Vector2Int.zero)
+                    {
+                        newMap[childX, childY] = Vector2Int.zero;
+                        continue;
+                    }
+
                     int parentX = childX + oldOffset.x * scaleFactor;
                     int parentY = childY + oldOffset.y * scaleFactor;
 
-                    float midXf = (childX + parentX) * 0.5f;
-                    float midYf = (childY + parentY) * 0.5f;
 
-                    double dx = (rnd.NextDouble() * 2.0 - 1.0) * jitterRadius;
-                    double dy = (rnd.NextDouble() * 2.0 - 1.0) * jitterRadius;
+                    int midX = (childX + parentX) / 2;
+                    int midY = (childY + parentY) / 2;
 
-                    float jitterX = midXf + (float)dx;
-                    float jitterY = midYf + (float)dy;
 
-                    int midXi = Mathf.RoundToInt(jitterX);
-                    int midYi = Mathf.RoundToInt(jitterY);
-                    midXi = Mathf.Clamp(midXi, 0, newSize - 1);
-                    midYi = Mathf.Clamp(midYi, 0, newSize - 1);
 
-                    Vector2 storedOffset = new Vector2(jitterX - midXi, jitterY - midYi);
-                    jitterOffsets[new Vector2Int(midXi, midYi)] = storedOffset;
-
-                    int dx1 = midXi - childX;
-                    int dy1 = midYi - childY;
+                   
+                    int dx1 = midX - childX;
+                    int dy1 = midY - childY;
                     newMap[childX, childY] = new Vector2Int(dx1, dy1);
 
-                    int dx2 = parentX - midXi;
-                    int dy2 = parentY - midYi;
-                    newMap[midXi, midYi] = new Vector2Int(dx2, dy2);
+                    int dx2 = parentX - midX;
+                    int dy2 = parentY - midY;
+                    newMap[midX, midY] = new Vector2Int(dx2, dy2);
+
+                }
+            }
+            return newMap;
+        }
+        public static List<Vector2Int> BresenhamLine(Vector2Int a, Vector2Int b)
+        {
+            List<Vector2Int> result = new List<Vector2Int>();
+
+            int x0 = a.x, y0 = a.y;
+            int x1 = b.x, y1 = b.y;
+
+            int dx = Mathf.Abs(x1 - x0);
+            int dy = Mathf.Abs(y1 - y0);
+            int sx = (x0 < x1) ? 1 : -1;
+            int sy = (y0 < y1) ? 1 : -1;
+            int err = dx - dy;
+
+            while (true)
+            {
+                result.Add(new Vector2Int(x0, y0));
+                if (x0 == x1 && y0 == y1) break;
+                int e2 = 2 * err;
+                if (e2 > -dy)
+                {
+                    err -= dy;
+                    x0 += sx;
+                }
+                if (e2 < dx)
+                {
+                    err += dx;
+                    y0 += sy;
                 }
             }
 
-            return newMap;
+            return result;
         }
-
-         
         public static bool[,] BuildMapFromDirections(Vector2Int[,] upscaledDir)
         {
+
             int newSize = upscaledDir.GetLength(0);
+            Debug.Log(newSize);
             bool[,] boolMap = new bool[newSize, newSize];
 
             for (int x = 0; x < newSize; x++)
@@ -460,43 +479,9 @@ namespace DLA
 
             return boolMap;
         }
-        public static Dictionary<Vector2Int, Vector2Int> UpscaleConnections(
-       Dictionary<Vector2Int, Vector2Int> oldConnections,
-       int oldSize,
-       int newSize
-   )
+        private static void SubdivideSegment(Vector2 start, Vector2 end, float amplification, System.Random rnd, List<Vector2> outputVertices)
         {
-            int scaleFactor = newSize / oldSize;
-            Dictionary<Vector2Int, Vector2Int> newConnections = new Dictionary<Vector2Int, Vector2Int>(oldConnections.Count * (scaleFactor * scaleFactor));
-
-            foreach (var kvp in oldConnections)
-            {
-                Vector2Int oldChild = kvp.Key;
-                Vector2Int oldParent = kvp.Value;
-
-                Vector2Int childBlockOrigin = new Vector2Int(oldChild.x * scaleFactor, oldChild.y * scaleFactor);
-                Vector2Int parentBlockOrigin = new Vector2Int(oldParent.x * scaleFactor, oldParent.y * scaleFactor);
-
-                Vector2Int newChild = childBlockOrigin;
-                Vector2Int delta = childBlockOrigin - parentBlockOrigin;
-                Vector2Int newMiddle = parentBlockOrigin + new Vector2Int(
-                    delta.x / 2,
-                    delta.y / 2
-                );
-                Vector2Int newParent = parentBlockOrigin;
-
-                newConnections[newMiddle] = newParent;
-                newConnections[newChild] = newMiddle;
-
-            }
-
-
-
-            return newConnections;
-        }
-        private static void SubdivideSegment(Vector2 start, Vector2 end, float amp, System.Random rnd, List<Vector2> outputVertices)
-        {
-            if (amp < 1f || Vector2.Distance(start, end) < 2f)
+            if (amplification < 1f || Vector2.Distance(start, end) < 2f)
             {
                 outputVertices.Add(end);
                 return;
@@ -504,13 +489,21 @@ namespace DLA
 
             Vector2 mid = (start + end) * 0.5f;
 
-            float jitterX = (float)((rnd.NextDouble() * 2.0 - 1.0) * amp);
-            float jitterY = (float)((rnd.NextDouble() * 2.0 - 1.0) * amp);
+            float jitterX = (float)((rnd.NextDouble() * 2.0 - 1.0) * amplification);
+            float jitterY = (float)((rnd.NextDouble() * 2.0 - 1.0) * amplification);
             Vector2 midJittered = new Vector2(mid.x + jitterX, mid.y + jitterY);
 
-            SubdivideSegment(start, midJittered, amp * 0.5f, rnd, outputVertices);
-            SubdivideSegment(midJittered, end, amp * 0.5f, rnd, outputVertices);
+            SubdivideSegment(start, midJittered, amplification * 0.5f, rnd, outputVertices);
+            SubdivideSegment(midJittered, end, amplification * 0.5f, rnd, outputVertices);
         }
+
+
+
+
+
+
+
+
     }
 
 

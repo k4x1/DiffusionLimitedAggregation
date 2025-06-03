@@ -155,6 +155,7 @@ namespace DLA {
                     if (walker.StepWalker(out Vector2Int walkerPos, out Vector2Int walkerStuckDir, diagonalWalk))
                     {
                         lock (mapLock) {
+                            parentMap[walkerPos.x,walkerPos.y] = walkerStuckDir;
                             parentDict[walkerPos] = walkerPos + walkerStuckDir;
                             DLAMap[walkerPos.x, walkerPos.y] = true;
                             heightMapData[walkerPos.x, walkerPos.y] =  1;
@@ -295,7 +296,7 @@ namespace DLA {
 
             if (weightFalloff)
             {
-                int[,] weightMap = Utils.CalculateWeights(DLAMap,parentDict);
+                int[,] weightMap = Utils.CalculateWeights(parentMap);
 
                 data = new float[resolution, resolution];
                 data = Utils.ApplySmoothHeights(weightMap,smoothPower);
