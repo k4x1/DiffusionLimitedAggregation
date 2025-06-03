@@ -11,6 +11,7 @@ using System.Threading.Tasks;
 using System.IO;
 using System.Linq;
 using System;
+using System.Security.Cryptography;
 
 namespace DLA {
 
@@ -33,6 +34,7 @@ namespace DLA {
         public Terrain terrain;
         [Header("DLA settings")]
         public int resolution = 513;
+        public bool diagonalWalk = false;
         [HideInInspector] public int walkerCount = 50000;
         [HideInInspector] public int maxWalkers = 50000;
         [HideInInspector] public int baseSize = 64;
@@ -117,10 +119,11 @@ namespace DLA {
                 cts.Dispose();
                 cts = null;
             }
+            Utils.jitterOffsets.Clear();
 
 
         }
-        
+
         private void RunDLA(CancellationToken token)
         {
             walkers = new List<Walker>();
@@ -147,9 +150,9 @@ namespace DLA {
             {
                 foreach(Walker walker in walkers) {
                     if (token.IsCancellationRequested) break;
-                    if (walker.inPos) continue; 
+                    if (walker.inPos) continue;
 
-                    if (walker.StepWalker(out Vector2Int walkerPos, out Vector2Int walkerStuckDir))
+                    if (walker.StepWalker(out Vector2Int walkerPos, out Vector2Int walkerStuckDir, diagonalWalk))
                     {
                         lock (mapLock) {
                             parentDict[walkerPos] = walkerPos + walkerStuckDir;
@@ -215,11 +218,8 @@ namespace DLA {
                 int walkersToAdd = Mathf.FloorToInt(fillFraction * size * size);
                 RunDLALevel(size, walkersToAdd, token);
 
-                Debug.Log("upscale work");
                 Vector2Int[,] upscaledDir = Utils.UpscaleDirectionMap(parentMap, nextSize);
-                Debug.Log("upscale work1");
                 bool[,] crispUpscale = Utils.BuildMapFromDirections(upscaledDir);
-                Debug.Log("upscale work12");
                 int[,] weightMap = Utils.CalculateWeights(parentMap);
                 float[,] crispHeight = Utils.ApplySmoothHeights(weightMap, smoothPower);
 
@@ -265,11 +265,11 @@ namespace DLA {
                 foreach (Walker walker in walkers)
                 {
                     if (walker.inPos) continue;
-                    if (walker.StepWalker(out Vector2Int walkerPos, out Vector2Int walkerStuckDir))
+                    if (walker.StepWalker(out Vector2Int walkerPos, out Vector2Int walkerStuckDir,diagonalWalk))
                     {
                         lock (mapLock)
                         {
-                            parentMap[walkerPos.x, walkerPos.y] = walker.directionToConnection;
+                            parentMap[walkerPos.x, walkerPos.y] = walkerStuckDir;
                             DLAMap[walkerPos.x, walkerPos.y] = true;
                         }
                         stuckCount++;
@@ -309,6 +309,22 @@ namespace DLA {
             {
                 data = Utils.AutoExpose(data);
             }
+            int res = data.GetLength(0);
+            foreach (var kv in Utils.jitterOffsets)
+            {
+                Vector2Int midPoint = kv.Key;
+                Vector2 floatOffset = kv.Value;
+
+                int mx = midPoint.x;
+                int my = midPoint.y;
+                if (mx >= 0 && mx < res && my >= 0 && my < res)
+                {
+                    data[mx, my] += 0.01f;
+                }
+            }
+
+
+
             terrain.terrainData.SetHeights(0, 0, data);
             EditorUtility.SetDirty(terrain.terrainData);
             Debug.Log("done normal tasks");

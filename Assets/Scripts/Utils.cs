@@ -9,6 +9,9 @@ namespace DLA
 {
     static class Utils
     {
+        private static readonly object rndLock = new object();
+        private static readonly System.Random globalRnd = new System.Random();
+        public static Dictionary<Vector2Int, Vector2> jitterOffsets = new Dictionary<Vector2Int, Vector2>();
         public static readonly Vector2Int SENTINEL = new Vector2Int(int.MinValue, int.MinValue);
         public static float[,] GaussianBlur(float[,] toBlur, int radius, float standardDeviation)
         {
@@ -317,23 +320,6 @@ namespace DLA
             }
             return levels.ToArray();
         }
-        public static bool[,] UpscaleNearest(bool[,] map, int newSize)
-        {
-            int oldSize = map.GetLength(0);
-            bool[,] result = new bool[newSize, newSize];
-            float scale = (float)oldSize / newSize;
-
-            for (int x = 0; x < newSize; x++)
-            {
-                for (int y = 0; y < newSize; y++)
-                {
-                    int mapX = Mathf.FloorToInt(x * scale);
-                    int mapY = Mathf.FloorToInt(y * scale);
-                    result[x, y] = map[mapX, mapY];
-                }
-            }
-            return result;
-        }
         public static float[,] UpscaleBilinear(float[,] map, int newSize)
         {
             int oldSize = map.GetLength(0);
@@ -393,10 +379,18 @@ namespace DLA
 
 
 
-        public static Vector2Int[,] UpscaleDirectionMap(Vector2Int[,] map, int newSize, int jitterMax = 0)
+        public static Vector2Int[,] UpscaleDirectionMap(Vector2Int[,] map, int newSize)
         {
+
             int oldSize = map.GetLength(0);
             int scaleFactor = newSize / oldSize;
+            int seed;
+            lock (rndLock)
+            {
+                seed = globalRnd.Next();
+            }
+            System.Random rnd = new System.Random(seed);
+            const float jitterRadius = 0.5f;
 
             Vector2Int[,] newMap = new Vector2Int[newSize, newSize];
             for (int i = 0; i < newSize; i++)
@@ -413,62 +407,40 @@ namespace DLA
                 {
                     Vector2Int oldOffset = map[x, y];
                     if (oldOffset == SENTINEL) continue;
-                
+
                     int childX = x * scaleFactor;
                     int childY = y * scaleFactor;
-
-                    if (oldOffset == Vector2Int.zero)
-                    {
-                        newMap[childX, childY] = Vector2Int.zero;
-                    }
 
                     int parentX = childX + oldOffset.x * scaleFactor;
                     int parentY = childY + oldOffset.y * scaleFactor;
 
+                    float midXf = (childX + parentX) * 0.5f;
+                    float midYf = (childY + parentY) * 0.5f;
 
-                    int midX = (childX + parentX) / 2;
-                    int midY = (childY + parentY) / 2;
+                    double dx = (rnd.NextDouble() * 2.0 - 1.0) * jitterRadius;
+                    double dy = (rnd.NextDouble() * 2.0 - 1.0) * jitterRadius;
 
+                    float jitterX = midXf + (float)dx;
+                    float jitterY = midYf + (float)dy;
 
+                    int midXi = Mathf.RoundToInt(jitterX);
+                    int midYi = Mathf.RoundToInt(jitterY);
+                    midXi = Mathf.Clamp(midXi, 0, newSize - 1);
+                    midYi = Mathf.Clamp(midYi, 0, newSize - 1);
 
-                    int dx1 = midX - childX;
-                    int dy1 = midY - childY;
+                    Vector2 storedOffset = new Vector2(jitterX - midXi, jitterY - midYi);
+                    jitterOffsets[new Vector2Int(midXi, midYi)] = storedOffset;
+
+                    int dx1 = midXi - childX;
+                    int dy1 = midYi - childY;
                     newMap[childX, childY] = new Vector2Int(dx1, dy1);
 
-                    int dx2 = parentX - midX;
-                    int dy2 = parentY - midY;
-                    newMap[midX, midY] = new Vector2Int(dx2, dy2);
-
-                   /* int jitteredMidX = midX + 1;// UnityEngine.Random.Range(-jitterMax, jitterMax + 1);
-                    int jitteredMidY = midY + 1;// UnityEngine.Random.Range(-jitterMax, jitterMax + 1);
-
-                    if (jitteredMidX < 0) 
-                    {
-                        jitteredMidX = 0; 
-                    }
-                    else if (jitteredMidX >= newSize)
-                    {
-                        jitteredMidX = newSize - 1; 
-                    }
-                    if (jitteredMidY < 0) 
-                    {
-                        jitteredMidY = 0; 
-                    }
-                    else if (jitteredMidY >= newSize)
-                    {
-                        jitteredMidY = newSize - 1;
-                    }
-
-                    int dx1 = jitteredMidX - childX;
-                    int dy1 = jitteredMidY - childY;
-                    newMap[childX, childY] = new Vector2Int(dx1, dy1);
-
-                    int dx2 = childX - jitteredMidX;
-                    int dy2 = childY - jitteredMidY;
-                    newMap[jitteredMidX, jitteredMidY] = new Vector2Int(dx2, dy2);*/
-
+                    int dx2 = parentX - midXi;
+                    int dy2 = parentY - midYi;
+                    newMap[midXi, midYi] = new Vector2Int(dx2, dy2);
                 }
             }
+
             return newMap;
         }
 
@@ -521,6 +493,23 @@ namespace DLA
 
 
             return newConnections;
+        }
+        private static void SubdivideSegment(Vector2 start, Vector2 end, float amp, System.Random rnd, List<Vector2> outputVertices)
+        {
+            if (amp < 1f || Vector2.Distance(start, end) < 2f)
+            {
+                outputVertices.Add(end);
+                return;
+            }
+
+            Vector2 mid = (start + end) * 0.5f;
+
+            float jitterX = (float)((rnd.NextDouble() * 2.0 - 1.0) * amp);
+            float jitterY = (float)((rnd.NextDouble() * 2.0 - 1.0) * amp);
+            Vector2 midJittered = new Vector2(mid.x + jitterX, mid.y + jitterY);
+
+            SubdivideSegment(start, midJittered, amp * 0.5f, rnd, outputVertices);
+            SubdivideSegment(midJittered, end, amp * 0.5f, rnd, outputVertices);
         }
     }
 
