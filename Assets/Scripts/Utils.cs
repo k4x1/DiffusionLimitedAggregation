@@ -11,7 +11,7 @@ namespace DLA
     {
         private static readonly object rndLock = new object();
         private static readonly System.Random globalRnd = new System.Random();
-        public static Dictionary<Vector2Int, Vector2> jitterOffsets = new Dictionary<Vector2Int, Vector2>();
+        public static List<Vector2Int> jitterOffsets = new List<Vector2Int>();
         public static readonly Vector2Int SENTINEL = new Vector2Int(int.MinValue, int.MinValue);
         public static float[,] GaussianBlur(float[,] toBlur, int radius, float standardDeviation)
         {
@@ -374,7 +374,7 @@ namespace DLA
                 }
             }
         }
-        public static Vector2Int[,] UpscaleDirectionMap(Vector2Int[,] map, int newSize)
+        public static Vector2Int[,] UpscaleDirectionMap(Vector2Int[,] map, int newSize, int jitterRange = 0)
         {
             int oldSize = map.GetLength(0);
             int scaleFactor = newSize / oldSize;
@@ -382,6 +382,7 @@ namespace DLA
             {
                 Debug.LogError("error in upscale, size isnt right");
             }
+
             Vector2Int[,] newMap = new Vector2Int[newSize, newSize];
             for (int i = 0; i < newSize; i++)
             {
@@ -396,7 +397,6 @@ namespace DLA
                 for (int y = 0; y < oldSize; y++)
                 {
                     Vector2Int oldOffset = map[x, y];
-                    
                     if (oldOffset == SENTINEL) continue;
 
                     int childX = x * scaleFactor;
@@ -411,25 +411,46 @@ namespace DLA
                     int parentX = childX + oldOffset.x * scaleFactor;
                     int parentY = childY + oldOffset.y * scaleFactor;
 
-
                     int midX = (childX + parentX) / 2;
                     int midY = (childY + parentY) / 2;
 
+                    int maxAllowedJitter = scaleFactor / 2;
+                    int actualJitter = jitterRange > maxAllowedJitter ? maxAllowedJitter : jitterRange;
 
+                    int jitterX = 0;
+                    int jitterY = 0;
+                    if (actualJitter > 0)
+                    {
+                        lock (rndLock)
+                        {
+                            jitterX = globalRnd.Next(-actualJitter, actualJitter + 1);
+                            jitterY = globalRnd.Next(-actualJitter, actualJitter + 1);
+                        }
+                    }
 
-                   
-                    int dx1 = midX - childX;
-                    int dy1 = midY - childY;
-                    newMap[childX, childY] = new Vector2Int(dx1, dy1);
+                    int jitteredMidX = Mathf.Clamp(midX + jitterX, 0, newSize - 1);
+                    int jitteredMidY = Mathf.Clamp(midY + jitterY, 0, newSize - 1);
 
-                    int dx2 = parentX - midX;
-                    int dy2 = parentY - midY;
-                    newMap[midX, midY] = new Vector2Int(dx2, dy2);
+                    newMap[childX, childY] = new Vector2Int(
+                        jitteredMidX - childX,
+                        jitteredMidY - childY
+                    );
 
+                    jitterOffsets.Add(new Vector2Int(jitteredMidX, jitteredMidY));
+
+                    int clampedParentX = Mathf.Clamp(parentX, 0, newSize - 1);
+                    int clampedParentY = Mathf.Clamp(parentY, 0, newSize - 1);
+                    newMap[jitteredMidX, jitteredMidY] = new Vector2Int(
+                        clampedParentX - jitteredMidX,
+                        clampedParentY - jitteredMidY
+                    );
                 }
             }
+
             return newMap;
         }
+
+
         public static List<Vector2Int> BresenhamLine(Vector2Int a, Vector2Int b)
         {
             List<Vector2Int> result = new List<Vector2Int>();

@@ -35,10 +35,13 @@ namespace DLA {
         [Header("DLA settings")]
         public int resolution = 513;
         public bool diagonalWalk = false;
+        //basic
         [HideInInspector] public int walkerCount = 50000;
         [HideInInspector] public int maxWalkers = 50000;
+        //multires
         [HideInInspector] public int baseSize = 64;
         [HideInInspector] public float fillFraction = 0.5f;
+        [HideInInspector] public int jitterRange;
 
         [Header("Post proccessing options")]
         public bool autoExpose = false;
@@ -219,7 +222,7 @@ namespace DLA {
                 int walkersToAdd = Mathf.FloorToInt(fillFraction * size * size);
                 RunDLALevel(size, walkersToAdd, token);
 
-                Vector2Int[,] upscaledDir = Utils.UpscaleDirectionMap(parentMap, nextSize);
+                Vector2Int[,] upscaledDir = Utils.UpscaleDirectionMap(parentMap, nextSize, jitterRange);
                 bool[,] crispUpscale = Utils.BuildMapFromDirections(upscaledDir);
                 int[,] weightMap = Utils.CalculateWeights(parentMap);
                 float[,] crispHeight = Utils.ApplySmoothHeights(weightMap, smoothPower);
@@ -310,19 +313,7 @@ namespace DLA {
             {
                 data = Utils.AutoExpose(data);
             }
-            int res = data.GetLength(0);
-            foreach (var kv in Utils.jitterOffsets)
-            {
-                Vector2Int midPoint = kv.Key;
-                Vector2 floatOffset = kv.Value;
-
-                int mx = midPoint.x;
-                int my = midPoint.y;
-                if (mx >= 0 && mx < res && my >= 0 && my < res)
-                {
-                    data[mx, my] += 0.01f;
-                }
-            }
+ 
 
 
 
