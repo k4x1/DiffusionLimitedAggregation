@@ -15,12 +15,13 @@ using System.Security.Cryptography;
 
 namespace DLA {
 
-    public enum DLAMode
+    public enum TerrainMode
     {
         Basic,
         MultiResolution,
         NoiseGuided,
-        ConvexHull
+        ConvexHull,
+        PerlinNoise
     }
 
 
@@ -35,13 +36,23 @@ namespace DLA {
         [Header("DLA settings")]
         public int resolution = 513;
         public bool diagonalWalk = false;
+        public float heightMultiplier = 100f;
         //basic
+        [Header("Basic dla Settings")]
         [HideInInspector] public int walkerCount = 50000;
         [HideInInspector] public int maxWalkers = 50000;
         //multires
+        [Header("Multires dla Settings")]
         [HideInInspector] public int baseSize = 64;
         [HideInInspector] public float fillFraction = 0.5f;
-        [HideInInspector] public int jitterRange;
+         public int jitterRange = 2;
+
+        [Header("Perlin noise settings")]
+        [HideInInspector] public int perlinOctaves = 4;
+        [HideInInspector] public float perlinBaseScale = 0.005f;
+        [HideInInspector] public float perlinPersistence = 0.5f;
+        [HideInInspector] public float perlinLacunarity = 2.0f;
+        [HideInInspector] public int perlinSeed = 42;
 
         [Header("Post proccessing options")]
         public bool autoExpose = false;
@@ -70,7 +81,7 @@ namespace DLA {
         [HideInInspector] string dataPath { get { return Path.Combine(Application.persistentDataPath, "dlaData.bin"); } }
 
         [Header("DLA Mode")]
-        public DLAMode mode = DLAMode.Basic;
+        public TerrainMode mode = TerrainMode.Basic;
 
         public void StartTaskDLA()
         {
@@ -83,21 +94,24 @@ namespace DLA {
             Task.Run(() => {
                 switch (mode)
                 {
-                    case DLAMode.Basic:
+                    case TerrainMode.Basic:
                      
                         RunDLA(cts.Token);
                         break;
 
-                    case DLAMode.MultiResolution:
+                    case TerrainMode.MultiResolution:
                         RunMultiResolutionDLA(cts.Token);
                         break;
 
-                    case DLAMode.NoiseGuided:
+                    case TerrainMode.NoiseGuided:
                         //RunNoiseGuidedDLA(cts.Token);
                         break;
 
-                    case DLAMode.ConvexHull:
+                    case TerrainMode.ConvexHull:
                         //RunConvexHullDLA(cts.Token);
+                        break;
+                    case TerrainMode.PerlinNoise:
+                        RunPerlinNoise(cts.Token);
                         break;
                 }
                 stopwatch.Stop();
@@ -189,11 +203,12 @@ namespace DLA {
             #endif
 
         }
-        private void RunMultiResolutionDLA(CancellationToken token) {
-
+        private void RunMultiResolutionDLA(CancellationToken token)
+        {
             Stopwatch stopwatch = Stopwatch.StartNew();
             int[] levels = Utils.ComputeLevels(baseSize, resolution);
             int currentSize = levels[0];
+
             walkers = new List<Walker>();
             Vector2Int root = new Vector2Int(baseSize / 2, baseSize / 2);
             heightMapData = new float[baseSize, baseSize];
@@ -206,8 +221,8 @@ namespace DLA {
                     parentMap[x, y] = Utils.SENTINEL;
                 }
             }
-            parentMap[baseSize/2, baseSize/2] = new Vector2Int(0,0);
-            
+            parentMap[baseSize / 2, baseSize / 2] = new Vector2Int(0, 0);
+
             parentDict = new Dictionary<Vector2Int, Vector2Int>();
             DLAMap = new bool[baseSize, baseSize];
             DLAMap[root.x, root.y] = true;
@@ -224,22 +239,33 @@ namespace DLA {
 
                 Vector2Int[,] upscaledDir = Utils.UpscaleDirectionMap(parentMap, nextSize, jitterRange);
                 bool[,] crispUpscale = Utils.BuildMapFromDirections(upscaledDir);
-                int[,] weightMap = Utils.CalculateWeights(parentMap);
+
+                int[,] weightMap = Utils.CalculateWeights(upscaledDir);
                 float[,] crispHeight = Utils.ApplySmoothHeights(weightMap, smoothPower);
 
-                float[,] newBlurry = Utils.UpscaleBilinear(heightMapData, nextSize);
-                newBlurry = Utils.DualFilterBlur(newBlurry, radius, standardDeviation);
+                float[,] skeletonUps = Utils.UpscaleBilinear(heightMapData, nextSize);
 
-                float[,] crispHeightNN = Utils.UpscaleBilinear(crispHeight, nextSize);
+                float[,] blurredSkeletonUps = Utils.GaussianBlur(skeletonUps, /*radius=*/6, /*stdDev=*/2);
 
-                Utils.MergeCrispIntoBlurry(crispUpscale, crispHeightNN, newBlurry);
+                float[,] crispHeightNext = Utils.UpscaleBilinear(crispHeight, nextSize);
+
+                float[,] merged = new float[nextSize, nextSize];
+                for (int x = 0; x < nextSize; x++)
+                {
+                    for (int y = 0; y < nextSize; y++)
+                    {
+                        float rawDelta = crispHeightNext[x, y] - skeletonUps[x, y];
+                        float falloff = Mathf.SmoothStep(0, 1, skeletonUps[x, y]);
+                        merged[x, y] = blurredSkeletonUps[x, y] + rawDelta * falloff;
+                    }
+                }
 
                 currentSize = nextSize;
                 DLAMap = crispUpscale;
-                heightMapData = newBlurry;
+                heightMapData = crispHeightNext;
                 parentMap = upscaledDir;
-            }
 
+            }
 
 #if UNITY_EDITOR
             EditorApplication.delayCall += () =>
@@ -247,11 +273,11 @@ namespace DLA {
                 SaveDLAData();
                 PostProccessing();
                 stopwatch.Stop();
-                Debug.Log($"[MultiRes DLA] Total Time: {stopwatch.Elapsed.TotalSeconds:F3}s | final res {resolution}");
+                Debug.Log($"Multires DLA has taken {stopwatch.Elapsed.TotalSeconds:F3} time to run | resolution {resolution} | baseSize {baseSize} | fillFraction {fillFraction}");
             };
 #else
-    stopwatch.Stop();
-    Debug.Log($"[MultiRes DLA] Total Time: {stopwatch.Elapsed.TotalSeconds:F3}s | final res {resolution}");
+            stopwatch.Stop();
+            Debug.Log($"[MultiRes DLA] Total Time: {stopwatch.Elapsed.TotalSeconds:F3}s | final res {resolution}");
 #endif
         }
         private void RunDLALevel(int size, int walkersToAdd, CancellationToken token)
@@ -275,6 +301,7 @@ namespace DLA {
                         {
                             parentMap[walkerPos.x, walkerPos.y] = walkerStuckDir;
                             DLAMap[walkerPos.x, walkerPos.y] = true;
+                            heightMapData[walkerPos.x, walkerPos.y] = 1f;
                         }
                         stuckCount++;
                         if (stuckCount >= walkersToAdd)
@@ -285,6 +312,80 @@ namespace DLA {
                 }
             }
         }
+        private void RunPerlinNoise(CancellationToken token)
+        {
+            int res = resolution;
+            heightMapData = new float[res, res];
+
+            System.Random perlinRnd = new System.Random(perlinSeed);
+            Vector2[] octaveOffsets = new Vector2[perlinOctaves];
+            for (int i = 0; i < perlinOctaves; i++)
+            {
+                float offsetX = perlinRnd.Next(-100000, 100000);
+                float offsetY = perlinRnd.Next(-100000, 100000);
+                octaveOffsets[i] = new Vector2(offsetX, offsetY);
+            }
+
+            float maxPossibleHeight = 0;
+            float amplitude = 1;
+            for (int i = 0; i < perlinOctaves; i++)
+            {
+                maxPossibleHeight += amplitude;
+                amplitude *= perlinPersistence;
+            }
+
+            Stopwatch stopwatch = Stopwatch.StartNew();
+
+            for (int y = 0; y < res; y++)
+            {
+                if (token.IsCancellationRequested) return;
+                for (int x = 0; x < res; x++)
+                {
+                    float noiseHeight = 0f;
+                    float frequency = perlinBaseScale;
+                    amplitude = 1f;
+
+                    for (int i = 0; i < perlinOctaves; i++)
+                    {
+                        float sampleX = (x + octaveOffsets[i].x) * frequency;
+                        float sampleY = (y + octaveOffsets[i].y) * frequency;
+
+                        float perlinValue = Mathf.PerlinNoise(sampleX, sampleY) * 2f - 1f;
+                        noiseHeight += perlinValue * amplitude;
+
+                        amplitude *= perlinPersistence;
+                        frequency *= perlinLacunarity;
+                    }
+
+                    float normalizedHeight = (noiseHeight / maxPossibleHeight + 1f) / 2f;
+                    heightMapData[y, x] = normalizedHeight;
+                }
+            }
+
+            stopwatch.Stop();
+
+#if UNITY_EDITOR
+            EditorApplication.delayCall += () =>
+            {
+                TerrainData tData = terrain.terrainData;
+                tData.heightmapResolution = res;
+                tData.size = new Vector3(res, heightMultiplier, res);
+
+                tData.SetHeights(0, 0, heightMapData);
+
+                EditorUtility.SetDirty(tData);
+
+                Debug.Log($"Perlin noise has taken {stopwatch.Elapsed.TotalSeconds:F3}s | resolution {res}");
+            };
+#else
+            TerrainData tData = terrain.terrainData;
+            tData.heightmapResolution = res;
+            tData.size = new Vector3(res, perlinHeightMultiplier, res);
+            tData.SetHeights(0, 0, heightMapData);
+            Debug.Log($"[PerlinNoise] Generation time: {stopwatch.Elapsed.TotalSeconds:F3}s | resolution {res}");
+#endif
+        }
+
         public void PostProccessing()
         {
             if (heightMapData == null || heightMapData.Length == 0)
@@ -313,11 +414,13 @@ namespace DLA {
             {
                 data = Utils.AutoExpose(data);
             }
- 
 
 
 
-            terrain.terrainData.SetHeights(0, 0, data);
+            TerrainData tData = terrain.terrainData;
+            tData.heightmapResolution = resolution;
+            tData.size = new Vector3(resolution, heightMultiplier, resolution);
+            tData.SetHeights(0, 0, data);
             EditorUtility.SetDirty(terrain.terrainData);
             Debug.Log("done normal tasks");
         }

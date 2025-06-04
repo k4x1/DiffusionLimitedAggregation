@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Security.Cryptography;
 using UnityEngine;
 namespace DLA
 {
@@ -80,27 +81,40 @@ namespace DLA
             DrawHistogramGizmos(normReal, originReal, Color.blue);
         }
 
-        float[,] LoadHeightmap(Texture2D map)
+        float[,] LoadHeightmap(Texture2D map, int res = 513)
         {
-            float[,] result;
 
-            int w = map.width;
-            int h = map.height;
-
-            result = new float[w, h];
-
-            Color[] pixels = map.GetPixels();
-
-            for (int y = 0; y < h; y++)
+            if (map == null)
             {
-                for (int x = 0; x < w; x++)
+                Debug.LogError("no texture");
+                return null;
+            }
+
+            if (map.width != map.height)
+            {
+                Debug.LogWarning("source not square");
+            }
+            float[,] result = new float[res, res];
+
+            for (int y = 0; y < res; y++)
+            {
+                float v = (y + 0.5f) / res;
+
+                for (int x = 0; x < res; x++)
                 {
-                    int index = y * w + x;
-                    result[x, y] = pixels[index].grayscale;
+                    float u = (x + 0.5f) / res;
+
+                    Color sampledColor = map.GetPixelBilinear(u, v);
+
+                    float gray = sampledColor.r;
+
+                    result[x, y] = gray;
                 }
             }
+
             return result;
         }
+    
         private float[] NormalizeHistogram(int[] histogram)
         {
             float total = histogram.Sum();
@@ -194,6 +208,46 @@ namespace DLA
                 varianceReal += dReal * dReal;
             }
             return covarianceSum / Math.Sqrt(varianceGen * varianceReal);
+        }
+
+        public static float[,] ConvertTextureToFloatArray(Texture2D tex, int res)
+        {
+            if (tex == null)
+            {
+                Debug.LogError("TextureUtility.ConvertTextureToFloatArray: tex is null.");
+                return null;
+            }
+
+            if (res <= 0)
+            {
+                Debug.LogError("TextureUtility.ConvertTextureToFloatArray: Resolution must be greater than zero.");
+                return null;
+            }
+
+            if (tex.width != tex.height)
+            {
+                Debug.LogWarning("TextureUtility.ConvertTextureToFloatArray: Source texture is not square. Results may be distorted.");
+            }
+
+            float[,] result = new float[res, res];
+
+            for (int y = 0; y < res; y++)
+            {
+                float v = (y + 0.5f) / res;
+
+                for (int x = 0; x < res; x++)
+                {
+                    float u = (x + 0.5f) / res;
+
+                    Color sampledColor = tex.GetPixelBilinear(u, v);
+
+                    float gray = sampledColor.r;
+
+                    result[x, y] = gray;
+                }
+            }
+
+            return result;
         }
     }
 }

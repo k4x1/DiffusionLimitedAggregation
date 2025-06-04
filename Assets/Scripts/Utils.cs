@@ -360,14 +360,14 @@ namespace DLA
             float[,] result = UpscaleBilinear(blurredDown, size);
             return result;
         }
-        public static void MergeCrispIntoBlurry(bool[,] crispNN, float[,] crispHeight, float[,] blurry)
+        public static void MergeCrispIntoBlurry(bool[,] crispMap, float[,] crispHeight, float[,] blurry)
         {
             int newSize = blurry.GetLength(0);
             for (int x = 0; x < newSize; x++)
             {
                 for (int y = 0; y < newSize; y++)
                 {
-                    if (crispNN[x, y])
+                    if (crispMap[x, y])
                     {
                         blurry[x, y] = crispHeight[x, y];
                     }
