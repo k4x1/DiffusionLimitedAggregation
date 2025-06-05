@@ -10,7 +10,6 @@ namespace DLA
         private static readonly System.Random globalRnd = new System.Random();
         public static List<Vector2Int> jitterOffsets = new List<Vector2Int>();
         public static readonly Vector2Int SENTINEL = new Vector2Int(int.MinValue, int.MinValue);
-        private static readonly float[,] TempBlurBuffer = null;
         private static readonly object jitterLock = new object();
         public static float[,] GaussianBlur(float[,] toBlur, int radius, float standardDeviation)
         {
@@ -347,12 +346,10 @@ namespace DLA
             List<int> levels = new List<int>();
             int current = baseSize;
             levels.Add(current);
-            Debug.Log(current);
             while (current * 2 <= finalSize)
             {
                 current *= 2;
                 levels.Add(current);
-                Debug.Log(current);
             }
             return levels;
         }

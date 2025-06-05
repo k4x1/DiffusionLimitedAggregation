@@ -71,7 +71,13 @@ namespace DLA {
         [Header("Smoothing settings")]
         public float smoothPower = 0.5f;  // the lower this is the higher the lower bits are
 
-        
+
+        [Header("Gizmos")]
+        public bool drawHeightMapData = true;
+        public bool drawWalkers = true;
+        public bool drawConnections = true;
+
+
         [HideInInspector] public bool[,] DLAMap;
         [HideInInspector] public Vector2Int[,] parentMap;
         [HideInInspector] Dictionary<Vector2Int, Vector2Int> parentDict;
@@ -80,10 +86,8 @@ namespace DLA {
 
         [HideInInspector] SynchronizationContext unityContext;
         [HideInInspector] CancellationTokenSource cts;
-        [HideInInspector] object mapLock = new object();
-
-
         [HideInInspector] string dataPath { get { return Path.Combine(Application.persistentDataPath, "dlaData.bin"); } }
+        [HideInInspector] object mapLock = new object();
 
         [Header("DLA Mode")]
         public TerrainMode mode = TerrainMode.Basic;
@@ -271,7 +275,6 @@ namespace DLA {
             {
              
                 int res = levelSizes[i];
-                Debug.Log(res);
                 if (token.IsCancellationRequested)
                 {
                     Debug.Log("MultiResolution DLA canceled");
@@ -596,7 +599,7 @@ namespace DLA {
                         }
                     }
                 }
-                if (parentMap != null)
+                if (parentMap != null && drawConnections)
                 {
                     Gizmos.color = Color.cyan;
                     for (int x = 0; x < size; x++)
@@ -610,20 +613,20 @@ namespace DLA {
                         }
                     }
                 }
-                if (walkers == null || walkers.Count == 0)
-                    return;
-
-                Walker[] snapshot = walkers.ToArray();
-
-                foreach (Walker walker in snapshot)
+                if (walkers != null && walkers.Count != 0 && drawWalkers)
                 {
-                    if (walker == null || walker.inPos) continue;
+                     Walker[] snapshot = walkers.ToArray();
 
-                    Gizmos.color = new Color(0, 1, 0, 0.5f);
-                    Vector3 pos3D = new Vector3(walker.GetPos().x, 100, walker.GetPos().y);
-                    Gizmos.DrawCube(pos3D, Vector3.one);
+                    foreach (Walker walker in snapshot)
+                    {
+                        if (walker == null || walker.inPos) continue;
+
+                        Gizmos.color = new Color(0, 1, 0, 0.5f);
+                        Vector3 pos3D = new Vector3(walker.GetPos().x, 100, walker.GetPos().y);
+                        Gizmos.DrawCube(pos3D, Vector3.one);
+                    }
                 }
-                if (heightMapData != null)
+                if (heightMapData != null && drawHeightMapData)
                 {
                     for (int x = 0; x < size; x++)
                     {
