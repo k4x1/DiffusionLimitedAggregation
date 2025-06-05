@@ -80,6 +80,86 @@ namespace DLA
             return false;
 
         }
+        public bool StepWalkerNoiseGuided(out Vector2Int stuckPos, out Vector2Int dirToConnection, float[,] noiseField, bool diagonal = true)
+        {
+            stuckPos = Vector2Int.zero;
+            dirToConnection = Vector2Int.zero;
+            int width = DLAmap.GetLength(0);
+            int height = DLAmap.GetLength(1);
+
+            Vector2Int[] choices = diagonal ? diagonalDirections : directions;
+            int choiceCount = choices.Length;
+
+            float totalWeight = 0f;
+            float[] weights = new float[choiceCount];
+            // noisefield weights
+
+            for (int i = 0; i < choiceCount; i++)
+            {
+                Vector2Int offset = choices[i];
+                int nx = pos.x + offset.x;
+                int ny = pos.y + offset.y;
+                bool outOfBounds = nx < 0 || nx >= width || ny < 0 || ny >= height;
+                weights[i] = ( outOfBounds ?0 : weights[i] = noiseField[nx, ny]);
+      
+                totalWeight += weights[i];
+            }
+
+            int selectedIndex;
+            if (totalWeight <= 0f)
+            {
+                // If all weights are zero (e.g. edge or noise = 0), pick uniformly
+                selectedIndex = rnd.Next(choiceCount);
+            }
+            else
+            {
+                // Pick a random number in [0, totalWeight)
+                float r = (float)rnd.NextDouble() * totalWeight;
+                float cumulative = 0f;
+                selectedIndex = 0;
+
+                for (int i = 0; i < choiceCount; i++)
+                {
+                    cumulative += weights[i];
+                    if (r <= cumulative)
+                    {
+                        selectedIndex = i;
+                        break;
+                    }
+                }
+            }
+
+            Vector2Int chosenOffset = choices[selectedIndex];
+            Vector2Int newPos = pos + chosenOffset;
+
+            // If out of bounds, do nothing this step
+            if (newPos.x < 0 || newPos.x >= width || newPos.y < 0 || newPos.y >= height)
+            {
+                return false;
+            }
+
+            // Check for sticking
+            if (DLAmap[newPos.x, newPos.y])
+            {
+                stuckPos = pos;
+                dirToConnection = chosenOffset;
+                directionToConnection = chosenOffset;
+                inPos = true;
+                return true;
+            }
+
+            // Otherwise, move into that cell
+            pos = newPos;
+            stepCount++;
+
+            if (stepCount >= maxSteps)
+            {
+                stepCount = 0;
+            }
+
+            return false;
+        }
+
         public Vector2Int GetPos()
         {
             return pos;

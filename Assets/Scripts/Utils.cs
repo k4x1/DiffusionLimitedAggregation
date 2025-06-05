@@ -374,6 +374,56 @@ namespace DLA
                 }
             }
         }
+        public static Vector2Int[,] UpscaleDirectionMap1(Vector2Int[,] map)
+        {
+            int oldSize = map.GetLength(0);
+            int newSize = oldSize * 2;
+            Vector2Int[,] newMap = new Vector2Int[newSize, newSize];
+            for (int i = 0; i < newSize; i++)
+            {
+                for (int j = 0; j < newSize; j++)
+                {
+                    newMap[i, j] = SENTINEL;
+                }
+            }
+            Vector2Int root = new Vector2Int(oldSize, oldSize);
+
+            void StepInDirection(Vector2Int oldPos, Vector2Int newPos)
+            {
+                Vector2Int dir = map[oldPos.x, oldPos.y];
+                newMap[newPos.x, newPos.y] = dir;
+                Vector2Int lastPos = newPos - dir;
+                newMap[lastPos.x, lastPos.x] = dir;
+                for (int x = -1; x < 2; x++)
+                {
+                    for (int y = -1; y < 2; y++)
+                    {
+                        Vector2Int walk = map[x + lastPos.x, y + lastPos.y];
+                        if (walk == SENTINEL || (walk.x != -x && walk.y != -y)) continue;
+                        if (x == 0 && y == 0) continue;
+                        StepInDirection(
+                            new Vector2Int(oldPos.x + x, oldPos.y + y),
+                            new Vector2Int(lastPos.x + x, lastPos.y + y)
+                        );
+                    }
+                }
+            }
+
+            for (int x = -1; x < 2; x++)
+            {
+                for (int y = -1; y < 2; y++)
+                {
+                    if (map[x, y] == SENTINEL) continue;
+                    if (x == 0 && y == 0) continue;
+                    StepInDirection(
+                        new Vector2Int(root.x / 2 + x, root.y / 2 + y),
+                        new Vector2Int(root.x + x, root.y + y)
+                    );
+                }
+            }
+            return newMap;
+        }
+
         public static Vector2Int[,] UpscaleDirectionMap(Vector2Int[,] map, int newSize, int jitterRange = 0)
         {
             int oldSize = map.GetLength(0);

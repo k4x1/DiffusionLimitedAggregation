@@ -237,7 +237,7 @@ namespace DLA {
                 int walkersToAdd = Mathf.FloorToInt(fillFraction * size * size);
                 RunDLALevel(size, walkersToAdd, token);
 
-                Vector2Int[,] upscaledDir = Utils.UpscaleDirectionMap(parentMap, nextSize, jitterRange);
+                Vector2Int[,] upscaledDir = Utils.UpscaleDirectionMap1(parentMap);
                 bool[,] crispUpscale = Utils.BuildMapFromDirections(upscaledDir);
 
                 int[,] weightMap = Utils.CalculateWeights(upscaledDir);
