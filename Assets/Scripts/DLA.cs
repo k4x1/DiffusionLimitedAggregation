@@ -25,6 +25,21 @@ namespace DLA {
         PerlinNoise
     }
 
+    [Serializable]
+    public class ParentCell
+    {
+        public int x;
+        public int y;
+    }
+
+    [Serializable]
+    public class DLADataJson
+    {
+        public int size;
+        public bool[] DLAMap;
+        public ParentCell[] parentMap;
+        public float[] heightMapData;
+    }
 
     [ExecuteInEditMode]
 
@@ -80,13 +95,19 @@ namespace DLA {
 
         [HideInInspector] public bool[,] DLAMap;
         [HideInInspector] public Vector2Int[,] parentMap;
-        [HideInInspector] Dictionary<Vector2Int, Vector2Int> parentDict;
         [HideInInspector] float[,] heightMapData;
         [HideInInspector] List<Walker> walkers = new List<Walker>();
 
         [HideInInspector] SynchronizationContext unityContext;
         [HideInInspector] CancellationTokenSource cts;
-        [HideInInspector] string dataPath { get { return Path.Combine(Application.persistentDataPath, "dlaData.bin"); } }
+        [HideInInspector] string dataPath {
+            get {
+             
+                string folder = Path.Combine(Application.dataPath, "dla data");
+                return Path.Combine(folder, "dlaData.bin");
+                
+            } 
+        }
         [HideInInspector] object mapLock = new object();
 
         [Header("DLA Mode")]
@@ -159,8 +180,6 @@ namespace DLA {
             parentMap = new Vector2Int[resolution,resolution];
             heightMapData = new float[resolution, resolution];
 
-            parentDict = new Dictionary<Vector2Int, Vector2Int>();
-
             DLAMap = new bool[resolution, resolution];
             DLAMap[root.x, root.y] = true;
 
@@ -182,7 +201,6 @@ namespace DLA {
                     {
                         lock (mapLock) {
                             parentMap[walkerPos.x,walkerPos.y] = walkerStuckDir;
-                            parentDict[walkerPos] = walkerPos + walkerStuckDir;
                             DLAMap[walkerPos.x, walkerPos.y] = true;
                             heightMapData[walkerPos.x, walkerPos.y] =  1;
                         }
@@ -492,84 +510,89 @@ namespace DLA {
         {
             try
             {
+                int size = DLAMap.GetLength(0);
                 using (BinaryWriter bw = new BinaryWriter(File.Open(dataPath, FileMode.Create)))
                 {
-                    int res = DLAMap.GetLength(0);
-                    bw.Write(res);
-                    for (int x = 0; x < res; x++)
+                    bw.Write(size);
+
+                    for (int x = 0; x < size; x++)
                     {
-                        for (int y = 0; y < res; y++)
+                        for (int y = 0; y < size; y++)
                         {
                             bw.Write(DLAMap[x, y]);
                         }
                     }
-                    bw.Write(parentDict.Count);
-                    foreach (var kv in parentDict)
+
+                    for (int x = 0; x < size; x++)
                     {
-                        bw.Write(kv.Key.x); bw.Write(kv.Key.y);
-                        bw.Write(kv.Value.x); bw.Write(kv.Value.y);
+                        for (int y = 0; y < size; y++)
+                        {
+                            Vector2Int p = parentMap[x, y];
+                            bw.Write(p.x);
+                            bw.Write(p.y);
+                        }
                     }
-                    for (int x = 0; x < res; x++)
+
+                    for (int x = 0; x < size; x++)
                     {
-                        for (int y = 0; y < res; y++)
+                        for (int y = 0; y < size; y++)
                         {
                             bw.Write(heightMapData[x, y]);
                         }
                     }
                 }
-                Debug.Log("saved DLA data to " + dataPath);
+
+                Debug.Log($"saved DLA data ({size}) to {dataPath}");
             }
             catch (Exception e)
             {
                 Debug.LogError("error saving DLA data: " + e);
             }
         }
+
         public bool LoadDLAData()
         {
-            if (!File.Exists(dataPath)) return false;
+            if (!File.Exists(dataPath))
+                return false;
 
             try
             {
                 using (BinaryReader br = new BinaryReader(File.Open(dataPath, FileMode.Open)))
                 {
-                    int fileRes = br.ReadInt32();
-                    if (fileRes != resolution)
-                    { 
-                        Debug.LogWarning($"saved res {fileRes} != real res {resolution}"); 
-                    }
+                    int size = br.ReadInt32();
 
-                    DLAMap = new bool[resolution, resolution];
-                    parentDict = new Dictionary<Vector2Int, Vector2Int>();
-                    heightMapData = new float[resolution, resolution];
+                    DLAMap = new bool[size, size];
+                    parentMap = new Vector2Int[size, size];
+                    heightMapData = new float[size, size];
 
-                    for (int x = 0; x < resolution; x++)
+                    for (int x = 0; x < size; x++)
                     {
-                        for (int y = 0; y < resolution; y++)
+                        for (int y = 0; y < size; y++)
                         {
                             DLAMap[x, y] = br.ReadBoolean();
                         }
                     }
-                    int count = br.ReadInt32();
-                    for (int i = 0; i < count; i++)
+
+                    for (int x = 0; x < size; x++)
                     {
-                        int kx = br.ReadInt32();
-                        int ky = br.ReadInt32();
-
-                        int vx = br.ReadInt32();
-                        int vy = br.ReadInt32();
-
-                        parentDict[new Vector2Int(kx, ky)] = new Vector2Int(vx, vy);
+                        for (int y = 0; y < size; y++)
+                        {
+                            int px = br.ReadInt32();
+                            int py = br.ReadInt32();
+                            parentMap[x, y] = new Vector2Int(px, py);
+                        }
                     }
-                    // read heightMapData
-                    for (int x = 0; x < resolution; x++)
+
+                    for (int x = 0; x < size; x++)
                     {
-                        for (int y = 0; y < resolution; y++)
+                        for (int y = 0; y < size; y++)
                         {
                             heightMapData[x, y] = br.ReadSingle();
                         }
                     }
                 }
-                Debug.Log("loaded DLA data from " + dataPath);
+
+                Debug.Log($"loaded DLA data ({DLAMap.GetLength(0)}) from {dataPath}");
                 return true;
             }
             catch (Exception e)
@@ -579,7 +602,7 @@ namespace DLA {
             }
         }
 
- 
+
         private void OnDrawGizmos()
         {
             if (DLAMap != null)
@@ -634,6 +657,7 @@ namespace DLA {
                         {
                             Gizmos.color = Color.Lerp(Color.black, Color.white, heightMapData[x, y]);
                             Gizmos.DrawCube(new Vector3(x,200,y), Vector3.one);
+                            // please forgive me for my laggy crimes
                         }
                         
                     }
