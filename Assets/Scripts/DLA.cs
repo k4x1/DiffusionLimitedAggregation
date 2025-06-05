@@ -52,9 +52,12 @@ namespace DLA {
         public bool diagonalWalk = false;
         public float heightMultiplier = 100f; // scales only the drawn map
 
+        public bool killWalkers = false;
+        public int maxSteps = 200;
+
         public bool noiseGuided = false;
-        [HideInInspector]  public float[,] noiseField;
-        public float noiseFieldScale;
+        public float[,] noiseField;
+        public float noiseFieldScale = 1;
 
 
         public bool convexHull = false;
@@ -62,7 +65,7 @@ namespace DLA {
 
         //basic
         [Header("Basic dla Settings")]
-        [HideInInspector] public int walkerCount = 50000; // walkers spawned at start
+        [HideInInspector] public int walkerCount = 10000; // walkers spawned at start
         [HideInInspector] public int maxWalkers = 50000; // how many walkers can spawn before it stops
 
         [Header("Multiresolution DLA Settings")]
@@ -94,14 +97,19 @@ namespace DLA {
         public float smoothPower = 0.5f;  // the lower this is the higher the lower bits are
 
 
-        [Header("Visual debugging")]
-        
-        [HideInInspector] Texture2D heightTex;
-        [HideInInspector] bool textureCreated = false;
 
-        public bool drawHeightMapData = true;
+        [Header("Visual debugging")]
+        public bool createHeightTexture = true;
         public bool drawWalkers = true;
         public bool drawConnections = true;
+
+        // height stuff
+        [HideInInspector] Texture2D heightTex;
+        [HideInInspector] GameObject heightQuad;
+        
+        //noise field stuff
+        [HideInInspector] Texture2D noiseFieldTex;
+        [HideInInspector] GameObject noiseFieldQuad;
 
         // important stuff
         [HideInInspector] public bool[,] DLAMap;
@@ -131,6 +139,13 @@ namespace DLA {
 
             Stopwatch stopwatch = Stopwatch.StartNew();
             Debug.Log($"running {mode.ToString()}");
+
+            if (noiseGuided)
+            {
+                noiseField = Utils.InitializeNoiseField(resolution, noiseFieldScale);
+                CreateHeightMapQuad(noiseField, -resolution * 0.5f, resolution * 0.5f, ref noiseFieldQuad, ref noiseFieldTex);
+            }
+
             Task.Run(() => {
                 switch (mode)
                 {
@@ -194,24 +209,33 @@ namespace DLA {
             }
             while (stuckCount < maxWalkers && !token.IsCancellationRequested)
             {
-                foreach(Walker walker in walkers) {
+                for (int i = 0; i < walkers.Count; i++)
+                {
                     if (token.IsCancellationRequested) break;
+
+                    Walker walker = walkers[i];
                     if (walker.inPos) continue;
 
-                    if (walker.StepWalker(out Vector2Int walkerPos, out Vector2Int walkerStuckDir, diagonalWalk))
+                    if (killWalkers &&  walker.stepCount >= maxSteps)
                     {
-                        lock (mapLock) {
-                            parentMap[walkerPos.x,walkerPos.y] = walkerStuckDir;
+                        walkers[i] = new Walker(DLAMap);
+                        // kill walkers when max steps reached
+                        continue;
+                    }
+
+                    if (Step(walker, out Vector2Int walkerPos, out Vector2Int walkerStuckDir))
+                    {
+                        lock (mapLock)
+                        {
+                            //walkers[i] = new Walker(DLAMap);
+                            parentMap[walkerPos.x, walkerPos.y] = walkerStuckDir;
                             DLAMap[walkerPos.x, walkerPos.y] = true;
-                            heightMapData[walkerPos.x, walkerPos.y] =  1;
+                            heightMapData[walkerPos.x, walkerPos.y] = 1;
                         }
                         stuckCount++;
-                        if(stuckCount >= maxWalkers)
-                        {
-                            break;
-                        }
+                        if (stuckCount >= maxWalkers) break;
                     }
-                } 
+                }
             }
             if (token.IsCancellationRequested)
             {
@@ -375,12 +399,18 @@ namespace DLA {
 
             while (stuckCount < walkersToAdd && !token.IsCancellationRequested)
             {
-                foreach (Walker walker in walkers)
+                for (int i = 0; i < walkers.Count; i++)
                 {
                     if (token.IsCancellationRequested) break;
+                    Walker walker = walkers[i];
                     if (walker.inPos) continue;
 
-                    if (walker.StepWalker(out Vector2Int walkerPos, out Vector2Int walkerStuckDir, diagonalWalk))
+                    if (killWalkers && walker.stepCount >= walker.maxSteps)
+                    {
+                        walkers[i] = new Walker(DLAMap);
+                        continue;
+                    }
+                    if (Step(walker,out Vector2Int walkerPos, out Vector2Int walkerStuckDir))
                     {
                         lock (mapLock)
                         {
@@ -506,13 +536,36 @@ namespace DLA {
                 heightMapData = Utils.AutoExpose(heightMapData);
             }
 
-
+            if (createHeightTexture)
+            {
+                CreateHeightMapQuad(heightMapData,resolution*1.5f,resolution*0.5f, ref heightQuad, ref heightTex);
+            }
 
             TerrainData tData = terrain.terrainData;
             tData.heightmapResolution = resolution;
             tData.size = new Vector3(resolution, heightMultiplier, resolution);
             tData.SetHeights(0, 0, heightMapData);
             EditorUtility.SetDirty(terrain.terrainData);
+        }
+        private bool Step(Walker walker, out Vector2Int stuckPos, out Vector2Int dirToConnection)
+        {
+            if (noiseGuided)
+            {
+                return walker.StepWalkerNoiseGuided(
+                    out stuckPos,
+                    out dirToConnection,
+                    noiseField,
+                    diagonalWalk
+                );
+            }
+            else
+            {
+                return walker.StepWalker(
+                    out stuckPos,
+                    out dirToConnection,
+                    diagonalWalk
+                );
+            }
         }
         public void SaveDLAData()
         {
@@ -604,40 +657,65 @@ namespace DLA {
                 return false;
             }
         }
-        void CreateHeightTexture()
+        void CreateHeightMapQuad(float[,] data, float posX, float posZ, ref GameObject quadPrefab, ref Texture2D quadTexture)
         {
-            int size = heightMapData.GetLength(0);
-            heightTex = new Texture2D(size, size, TextureFormat.RFloat, false, true);
-            heightTex.wrapMode = TextureWrapMode.Clamp;
-            heightTex.filterMode = FilterMode.Point;
+            if (data == null || data.Length == 0) return;
+
+            int size = data.GetLength(0);
+
+            if (quadTexture == null || quadTexture.width != size)
+            {
+                quadTexture = new Texture2D(size, size, TextureFormat.RGB24, false);
+                quadTexture.wrapMode = TextureWrapMode.Clamp;
+                quadTexture.filterMode = FilterMode.Point;
+            }
 
             for (int x = 0; x < size; x++)
             {
                 for (int y = 0; y < size; y++)
                 {
-                    float height = heightMapData[x, y];
-                    heightTex.SetPixel(x, y, new Color(height, height, height));
+                    float height = Mathf.Clamp01(data[x, y]);
+                    quadTexture.SetPixel(x, y, new Color(height, height, height, 1f));
                 }
             }
-            heightTex.Apply();
-            textureCreated = true;
+            quadTexture.Apply();
+
+            if (quadPrefab == null)
+            {
+                quadPrefab = GameObject.CreatePrimitive(PrimitiveType.Quad);
+                quadPrefab.name = "MapQuad";
+
+                MeshRenderer mr = quadPrefab.GetComponent<MeshRenderer>();
+                mr.sharedMaterial = new Material(Shader.Find("Unlit/Texture"));
+            }
+
+            quadPrefab.transform.position = new Vector3(posX, 0f, posZ);
+            quadPrefab.transform.rotation = Quaternion.Euler(90f, 0f, 0f);
+            float worldSize = size;
+            quadPrefab.transform.localScale = new Vector3(worldSize, worldSize, 1f);
+
+            MeshRenderer renderer = quadPrefab.GetComponent<MeshRenderer>();
+            renderer.sharedMaterial.mainTexture = quadTexture;
         }
+
         private void OnDrawGizmos()
         {
             if (DLAMap != null)
             {
                 int size = DLAMap.GetLength(0);
-
-                Gizmos.color = new Color(1, 0, 0, 0.5f); ;
-                float cubeSize = 1f;
-                for (int x = 0; x < size; x++)
+                if (drawWalkers)
                 {
-                    for (int y = 0; y < size; y++)
+                    Gizmos.color = new Color(1, 0, 0, 0.5f); ;
+                    float cubeSize = 1f;
+                    for (int x = 0; x < size; x++)
                     {
-                        if (DLAMap[x, y])
+                        for (int y = 0; y < size; y++)
                         {
-                            Vector3 worldPos = new Vector3(x, 100f, y);
-                            Gizmos.DrawCube(worldPos, Vector3.one * cubeSize);
+                            if (DLAMap[x, y])
+                            {
+                                Vector3 worldPos = new Vector3(x, 100f, y);
+                                Gizmos.DrawCube(worldPos, Vector3.one * cubeSize);
+                            }
                         }
                     }
                 }
@@ -668,7 +746,7 @@ namespace DLA {
                         Gizmos.DrawCube(pos3D, Vector3.one);
                     }
                 }
-                if (heightMapData != null && drawHeightMapData)
+               /* if (heightMapData != null && drawHeightMapData)
                 {
                     for (int x = 0; x < size; x++)
                     {
@@ -676,11 +754,11 @@ namespace DLA {
                         {
                             Gizmos.color = Color.Lerp(Color.black, Color.white, heightMapData[x, y]);
                             Gizmos.DrawCube(new Vector3(x,200,y), Vector3.one);
-                            // please forgive me for my laggy crimes
+                            // please forgive me for my laggy crimes    
                         }
                         
                     }
-                }
+                }*/
             }
          
         }
