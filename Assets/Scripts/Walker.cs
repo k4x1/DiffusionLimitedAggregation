@@ -25,6 +25,7 @@ namespace DLA
         private static readonly object rndLock = new object();
         private static readonly System.Random globalRnd = new System.Random();
         private readonly System.Random rnd;
+        // have to use system.rnd because unity doesnt support tasks
 
         Vector2Int pos = new Vector2Int(0, 0);
         bool[,] DLAmap;
@@ -32,8 +33,7 @@ namespace DLA
         public int maxSteps = 100;
         public int stepCount = 0;
         public Vector2Int directionToConnection;
-
-        public Walker(bool[,] _map)
+        public Walker(bool[,] map)
         {
             int seed;
             lock (rndLock)
@@ -41,16 +41,14 @@ namespace DLA
                 seed = globalRnd.Next(); 
             }
             rnd = new System.Random(seed);
-            DLAmap = _map;
-          //  pos = new Vector2Int(Random.Range(0, DLAmap.GetLength(0)), Random.Range(0, DLAmap.GetLength(1)));
+            DLAmap = map;
             pos = new Vector2Int(rnd.Next(0,DLAmap.GetLength(0)), rnd.Next(0, DLAmap.GetLength(1)));
         }
         public bool StepWalker(out Vector2Int stuckPos, out Vector2Int dirToConnection, bool diagonal = true)
         {
             stuckPos = Vector2Int.zero;
             dirToConnection = Vector2Int.zero;
-            int width = DLAmap.GetLength(0);
-            int height = DLAmap.GetLength(1);
+            int size = DLAmap.GetLength(0);
             Vector2Int[] choices = diagonal
             ? diagonalDirections
             : directions;
@@ -59,7 +57,7 @@ namespace DLA
 
             Vector2Int newPos = pos + offset;
 
-            if (newPos.x < 0 || newPos.x >= width || newPos.y < 0 || newPos.y >= height) return false;
+            if (newPos.x < 0 || newPos.x >= size || newPos.y < 0 || newPos.y >= size) return false;
 
             if (DLAmap[newPos.x, newPos.y])
             {
@@ -71,12 +69,12 @@ namespace DLA
             }
             pos = newPos;
         
-            stepCount++;
+         /*   stepCount++;
             if (stepCount >= maxSteps)
             {
-                // pos = new Vector2Int(Random.Range(0, DLAmap.GetLength(0)), Random.Range(0, DLAmap.GetLength(1)));
                 stepCount = 0;
-            }
+            }*/
+            // in future can implement killing and respawning, not really needed right now
             return false;
 
         }
@@ -84,8 +82,7 @@ namespace DLA
         {
             stuckPos = Vector2Int.zero;
             dirToConnection = Vector2Int.zero;
-            int width = DLAmap.GetLength(0);
-            int height = DLAmap.GetLength(1);
+            int size = DLAmap.GetLength(0);
 
             Vector2Int[] choices = diagonal ? diagonalDirections : directions;
             int choiceCount = choices.Length;
@@ -97,10 +94,13 @@ namespace DLA
             for (int i = 0; i < choiceCount; i++)
             {
                 Vector2Int offset = choices[i];
+                
                 int nx = pos.x + offset.x;
                 int ny = pos.y + offset.y;
-                bool outOfBounds = nx < 0 || nx >= width || ny < 0 || ny >= height;
-                weights[i] = ( outOfBounds ?0 : weights[i] = noiseField[nx, ny]);
+
+                // weight options from noise field
+                bool outOfBounds = nx < 0 || nx >= size || ny < 0 || ny >= size;
+                weights[i] =  outOfBounds ? 0 : noiseField[nx, ny];
       
                 totalWeight += weights[i];
             }
@@ -108,12 +108,12 @@ namespace DLA
             int selectedIndex;
             if (totalWeight <= 0f)
             {
-                // If all weights are zero (e.g. edge or noise = 0), pick uniformly
+                // pick random if somehow all weight is 0 
                 selectedIndex = rnd.Next(choiceCount);
             }
             else
             {
-                // Pick a random number in [0, totalWeight)
+                // pick a random number from 0 to max weight
                 float r = (float)rnd.NextDouble() * totalWeight;
                 float cumulative = 0f;
                 selectedIndex = 0;
@@ -124,6 +124,7 @@ namespace DLA
                     if (r <= cumulative)
                     {
                         selectedIndex = i;
+                        // select that direction 
                         break;
                     }
                 }
@@ -132,13 +133,12 @@ namespace DLA
             Vector2Int chosenOffset = choices[selectedIndex];
             Vector2Int newPos = pos + chosenOffset;
 
-            // If out of bounds, do nothing this step
-            if (newPos.x < 0 || newPos.x >= width || newPos.y < 0 || newPos.y >= height)
+            if (newPos.x < 0 || newPos.x >= size || newPos.y < 0 || newPos.y >= size)
             {
                 return false;
             }
 
-            // Check for sticking
+            // check map for stuck 
             if (DLAmap[newPos.x, newPos.y])
             {
                 stuckPos = pos;
@@ -148,14 +148,15 @@ namespace DLA
                 return true;
             }
 
-            // Otherwise, move into that cell
+            // if not then step
             pos = newPos;
             stepCount++;
 
-            if (stepCount >= maxSteps)
+           /* if (stepCount >= maxSteps)
             {
                 stepCount = 0;
-            }
+            }*/
+           //killing and respawning 
 
             return false;
         }

@@ -353,7 +353,21 @@ namespace DLA
             }
             return levels;
         }
+        public static float[,] InitializeNoiseField(int size, float noiseScale)
+        {
+            float[,] noiseField = new float[size, size];
+            for (int x = 0; x < size; x++)
+            {
+                for (int y = 0; y < size; y++)
+                {
+                    float sampleX = (float)x / size * noiseScale;
+                    float sampleY = (float)y / size * noiseScale;
 
+                    noiseField[x, y] = Mathf.PerlinNoise(sampleX, sampleY);
+                }
+            }
+            return noiseField;
+        }
         public static float[,] UpscaleNearestNeighbor(float[,] source)
         {
 

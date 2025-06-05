@@ -20,8 +20,6 @@ namespace DLA {
     {
         Basic,
         MultiResolution,
-        NoiseGuided,
-        ConvexHull,
         PerlinNoise
     }
 
@@ -52,11 +50,20 @@ namespace DLA {
         [Header("DLA settings")]
         public int resolution = 513;
         public bool diagonalWalk = false;
-        public float heightMultiplier = 100f;
+        public float heightMultiplier = 100f; // scales only the drawn map
+
+        public bool noiseGuided = false;
+        [HideInInspector]  public float[,] noiseField;
+        public float noiseFieldScale;
+
+
+        public bool convexHull = false;
+
+
         //basic
         [Header("Basic dla Settings")]
-        [HideInInspector] public int walkerCount = 50000;
-        [HideInInspector] public int maxWalkers = 50000;
+        [HideInInspector] public int walkerCount = 50000; // walkers spawned at start
+        [HideInInspector] public int maxWalkers = 50000; // how many walkers can spawn before it stops
 
         [Header("Multiresolution DLA Settings")]
         [HideInInspector] public int baseSize = 64; //starting grid size, this will scale up
@@ -87,26 +94,29 @@ namespace DLA {
         public float smoothPower = 0.5f;  // the lower this is the higher the lower bits are
 
 
-        [Header("Gizmos")]
+        [Header("Visual debugging")]
+        
+        [HideInInspector] Texture2D heightTex;
+        [HideInInspector] bool textureCreated = false;
+
         public bool drawHeightMapData = true;
         public bool drawWalkers = true;
         public bool drawConnections = true;
 
-
+        // important stuff
         [HideInInspector] public bool[,] DLAMap;
         [HideInInspector] public Vector2Int[,] parentMap;
         [HideInInspector] float[,] heightMapData;
         [HideInInspector] List<Walker> walkers = new List<Walker>();
-
         [HideInInspector] SynchronizationContext unityContext;
         [HideInInspector] CancellationTokenSource cts;
-        [HideInInspector] string dataPath {
-            get {
-             
+        [HideInInspector] string dataPath
+        {
+            get
+            {
                 string folder = Path.Combine(Application.dataPath, "dla data");
-                return Path.Combine(folder, "dlaData.bin");
-                
-            } 
+                return Path.Combine(folder, "dlaData.json");
+            }
         }
         [HideInInspector] object mapLock = new object();
 
@@ -120,25 +130,16 @@ namespace DLA {
             cts = new CancellationTokenSource();
 
             Stopwatch stopwatch = Stopwatch.StartNew();
-
+            Debug.Log($"running {mode.ToString()}");
             Task.Run(() => {
                 switch (mode)
                 {
                     case TerrainMode.Basic:
-                     
                         RunDLA(cts.Token);
                         break;
 
                     case TerrainMode.MultiResolution:
                         RunMultiResolutionDLA(cts.Token);
-                        break;
-
-                    case TerrainMode.NoiseGuided:
-                        //RunNoiseGuidedDLA(cts.Token);
-                        break;
-
-                    case TerrainMode.ConvexHull:
-                        //RunConvexHullDLA(cts.Token);
                         break;
                     case TerrainMode.PerlinNoise:
                         RunPerlinNoise(cts.Token);
@@ -148,10 +149,10 @@ namespace DLA {
 #if UNITY_EDITOR
                 EditorApplication.delayCall += () =>
                 {
-                    Debug.Log($"DLA has taken {stopwatch.Elapsed.TotalSeconds:F3} time to run | resolution {resolution} | maxWalkers {maxWalkers} | walkerCount {walkerCount}");
+                    Debug.Log($"{mode.ToString()} has taken {stopwatch.Elapsed.TotalSeconds:F3} time to run | resolution({resolution}), diagonalWalk({diagonalWalk}), noiseGuided({noiseGuided})");
                 };
 #else
-                Debug.Log($"DLA has taken {stopwatch.Elapsed.TotalSeconds:F3} time to run | resolution {resolution} | maxCalkers {maxWalkers} | walkerCount {walkerCount}");
+                Debug.Log($"{mode.ToString()} has taken {stopwatch.Elapsed.TotalSeconds:F3} time to run. resolution({resolution}), diagonalWalk({diagonalWalk}), noiseGuided({noiseGuided})");
 #endif
             },
             cts.Token);
@@ -221,8 +222,9 @@ namespace DLA {
             #if UNITY_EDITOR
             EditorApplication.delayCall += () =>
             {
+                Debug.Log($"Settings: resolution({resolution}), maxWalkers(maxWalkers), walkerCount(walkerCount)");
                 SaveDLAData();
-
+                
                 PostProccessing();
             };
             #else
@@ -234,7 +236,6 @@ namespace DLA {
         private void RunMultiResolutionDLA(CancellationToken token)
         {
 
-            Stopwatch stopwatch = Stopwatch.StartNew();
             /*
             get level sizes
             initiate values
@@ -345,14 +346,16 @@ namespace DLA {
 
             }
 
-            stopwatch.Stop();
 
 #if UNITY_EDITOR
             EditorApplication.delayCall += () =>
             {
                 SaveDLAData();
                 PostProccessing();
-                Debug.Log($"MultiResolution DLA took {stopwatch.Elapsed.TotalSeconds:F3}s | final res {resolution}");
+                Debug.Log($"Settings: baseSize({baseSize}), fillFraction({fillFraction}), " +
+                    $"crispBlurRadius({crispBlurRadius}), crispBlurStandardDeviation({crispBlurStandardDeviation})," +
+                    $"blurryBlurRadius({blurryBlurRadius}),(blurryBlurStandardDeviation({blurryBlurStandardDeviation})," +
+                    $"lerpAlpha({lerpAlpha})");
             };
 #else
             SaveDLAData();
@@ -455,15 +458,16 @@ namespace DLA {
                 tData.SetHeights(0, 0, heightMapData);
 
                 EditorUtility.SetDirty(tData);
-
-                Debug.Log($"Perlin noise has taken {stopwatch.Elapsed.TotalSeconds:F3}s | resolution {res}");
+                Debug.Log($"Settings: perlinOctaves({perlinOctaves}), perlinBaseScale({perlinBaseScale})," +
+                    $" perlinPersistence({perlinPersistence}), perlinLacunarity({perlinLacunarity}), perlinSeed({perlinSeed}),");
             };
 #else
             TerrainData tData = terrain.terrainData;
             tData.heightmapResolution = res;
-            tData.size = new Vector3(res, perlinHeightMultiplier, res);
+            tData.size = new Vector3(res, heightMultiplier, res);
             tData.SetHeights(0, 0, heightMapData);
-            Debug.Log($"[PerlinNoise] Generation time: {stopwatch.Elapsed.TotalSeconds:F3}s | resolution {res}");
+            Debug.Log($"Settings: perlinOctaves({perlinOctaves}), perlinBaseScale({perlinBaseScale})," +
+                    $" perlinPersistence({perlinPersistence}), perlinLacunarity({perlinLacunarity}), perlinSeed({perlinSeed}),");
 #endif
         }
 
@@ -474,26 +478,32 @@ namespace DLA {
                 if (!LoadDLAData())
                 {
                     Debug.LogError("no saved data");
+                    return;
                 }
             }
 
             float[,] data = heightMapData;
 
-            if (weightFalloff)
+            if (weightFalloff )
             {
-                int[,] weightMap = Utils.CalculateWeights(parentMap);
-
-                data = new float[resolution, resolution];
-                data = Utils.ApplySmoothHeights(weightMap,smoothPower);
+                if (parentMap == null || parentMap.Length == 0)
+                {
+                    Debug.LogError("no parentMap set");
+                }
+                else { 
+                    int[,] weightMap = Utils.CalculateWeights(parentMap);
+                    heightMapData = new float[resolution, resolution];
+                    heightMapData = Utils.ApplySmoothHeights(weightMap,smoothPower);
+                }
             }
 
             if (blur)
             {
-                data = Utils.GaussianBlur(data, radius, standardDeviation);
+                heightMapData = Utils.GaussianBlur(heightMapData, radius, standardDeviation);
             }
             if (autoExpose)
             {
-                data = Utils.AutoExpose(data);
+                heightMapData = Utils.AutoExpose(heightMapData);
             }
 
 
@@ -501,48 +511,52 @@ namespace DLA {
             TerrainData tData = terrain.terrainData;
             tData.heightmapResolution = resolution;
             tData.size = new Vector3(resolution, heightMultiplier, resolution);
-            tData.SetHeights(0, 0, data);
+            tData.SetHeights(0, 0, heightMapData);
             EditorUtility.SetDirty(terrain.terrainData);
-            Debug.Log("done normal tasks");
         }
-
         public void SaveDLAData()
         {
             try
             {
                 int size = DLAMap.GetLength(0);
-                using (BinaryWriter bw = new BinaryWriter(File.Open(dataPath, FileMode.Create)))
+
+                string folder = Path.GetDirectoryName(dataPath);
+                if (!Directory.Exists(folder))
+                { 
+                    Directory.CreateDirectory(folder); 
+                }
+
+                bool[] flatBool = new bool[size * size];
+                ParentCell[] flatParent = new ParentCell[size * size];
+                float[] flatFloat = new float[size * size];
+
+                for (int x = 0; x < size; x++)
                 {
-                    bw.Write(size);
-
-                    for (int x = 0; x < size; x++)
+                    for (int y = 0; y < size; y++)
                     {
-                        for (int y = 0; y < size; y++)
+                        int i = x * size + y;
+                        flatBool[i] = DLAMap[x, y];
+                        flatParent[i] = new ParentCell
                         {
-                            bw.Write(DLAMap[x, y]);
-                        }
-                    }
-
-                    for (int x = 0; x < size; x++)
-                    {
-                        for (int y = 0; y < size; y++)
-                        {
-                            Vector2Int p = parentMap[x, y];
-                            bw.Write(p.x);
-                            bw.Write(p.y);
-                        }
-                    }
-
-                    for (int x = 0; x < size; x++)
-                    {
-                        for (int y = 0; y < size; y++)
-                        {
-                            bw.Write(heightMapData[x, y]);
-                        }
+                            x = parentMap[x, y].x,
+                            y = parentMap[x, y].y
+                        };
+                        flatFloat[i] = heightMapData[x, y];
                     }
                 }
 
-                Debug.Log($"saved DLA data ({size}) to {dataPath}");
+                DLADataJson container = new DLADataJson
+                {
+                    size = size,
+                    DLAMap = flatBool,
+                    parentMap = flatParent,
+                    heightMapData = flatFloat
+                };
+
+                string json = JsonUtility.ToJson(container, true);
+                File.WriteAllText(dataPath, json);
+
+                Debug.Log($"Saved DLA data to {dataPath}");
             }
             catch (Exception e)
             {
@@ -553,46 +567,35 @@ namespace DLA {
         public bool LoadDLAData()
         {
             if (!File.Exists(dataPath))
+            {
+                Debug.LogError($"no file found at {dataPath}");
                 return false;
-
+            }
             try
             {
-                using (BinaryReader br = new BinaryReader(File.Open(dataPath, FileMode.Open)))
+                string json = File.ReadAllText(dataPath);
+                DLADataJson container = JsonUtility.FromJson<DLADataJson>(json);
+
+                int size = container.size;
+                DLAMap = new bool[size, size];
+                parentMap = new Vector2Int[size, size];
+                heightMapData = new float[size, size];
+
+                for (int x = 0; x < size; x++)
                 {
-                    int size = br.ReadInt32();
-
-                    DLAMap = new bool[size, size];
-                    parentMap = new Vector2Int[size, size];
-                    heightMapData = new float[size, size];
-
-                    for (int x = 0; x < size; x++)
+                    for (int y = 0; y < size; y++)
                     {
-                        for (int y = 0; y < size; y++)
-                        {
-                            DLAMap[x, y] = br.ReadBoolean();
-                        }
-                    }
-
-                    for (int x = 0; x < size; x++)
-                    {
-                        for (int y = 0; y < size; y++)
-                        {
-                            int px = br.ReadInt32();
-                            int py = br.ReadInt32();
-                            parentMap[x, y] = new Vector2Int(px, py);
-                        }
-                    }
-
-                    for (int x = 0; x < size; x++)
-                    {
-                        for (int y = 0; y < size; y++)
-                        {
-                            heightMapData[x, y] = br.ReadSingle();
-                        }
+                        int i = x * size + y;
+                        DLAMap[x, y] = container.DLAMap[i];
+                        parentMap[x, y] = new Vector2Int(
+                            container.parentMap[i].x,
+                            container.parentMap[i].y
+                        );
+                        heightMapData[x, y] = container.heightMapData[i];
                     }
                 }
 
-                Debug.Log($"loaded DLA data ({DLAMap.GetLength(0)}) from {dataPath}");
+                Debug.Log($"Loaded DLA data from {dataPath}");
                 return true;
             }
             catch (Exception e)
@@ -601,8 +604,24 @@ namespace DLA {
                 return false;
             }
         }
+        void CreateHeightTexture()
+        {
+            int size = heightMapData.GetLength(0);
+            heightTex = new Texture2D(size, size, TextureFormat.RFloat, false, true);
+            heightTex.wrapMode = TextureWrapMode.Clamp;
+            heightTex.filterMode = FilterMode.Point;
 
-
+            for (int x = 0; x < size; x++)
+            {
+                for (int y = 0; y < size; y++)
+                {
+                    float height = heightMapData[x, y];
+                    heightTex.SetPixel(x, y, new Color(height, height, height));
+                }
+            }
+            heightTex.Apply();
+            textureCreated = true;
+        }
         private void OnDrawGizmos()
         {
             if (DLAMap != null)
