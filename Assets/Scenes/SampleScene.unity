@@ -167,10 +167,22 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   terrain: {fileID: 277028964}
   resolution: 513
+  diagonalWalk: 0
+  heightMultiplier: 100
   walkerCount: 50000
   maxWalkers: 50000
   baseSize: 0
   fillFraction: 0
+  crispBlurRadius: 3
+  crispBlurStandardDeviation: 1
+  blurryBlurRadius: 3
+  blurryBlurStandardDeviation: 1
+  lerpAlpha: 0.3
+  perlinOctaves: 4
+  perlinBaseScale: 0.005
+  perlinPersistence: 0.5
+  perlinLacunarity: 2
+  perlinSeed: 42
   autoExpose: 0
   blur: 0
   weightFalloff: 0
@@ -614,16 +626,28 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   terrain: {fileID: 1560787789}
-  resolution: 513
+  resolution: 512
+  diagonalWalk: 1
+  heightMultiplier: 100
   walkerCount: 50000
   maxWalkers: 50000
-  baseSize: 256
+  baseSize: 16
   fillFraction: 0.1
+  crispBlurRadius: 3
+  crispBlurStandardDeviation: 1
+  blurryBlurRadius: 3
+  blurryBlurStandardDeviation: 1
+  lerpAlpha: 0
+  perlinOctaves: 4
+  perlinBaseScale: 0.005
+  perlinPersistence: 0.5
+  perlinLacunarity: 2
+  perlinSeed: 42
   autoExpose: 0
   blur: 0
   weightFalloff: 0
-  radius: 36
-  standardDeviation: 12
+  radius: 3
+  standardDeviation: 1
   smoothPower: 0.5
   mode: 1
 --- !u!154 &1560787788

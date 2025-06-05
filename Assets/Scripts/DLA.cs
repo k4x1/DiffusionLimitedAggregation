@@ -12,6 +12,7 @@ using System.IO;
 using System.Linq;
 using System;
 using System.Security.Cryptography;
+using UnityEngine.UIElements;
 
 namespace DLA {
 
@@ -41,11 +42,15 @@ namespace DLA {
         [Header("Basic dla Settings")]
         [HideInInspector] public int walkerCount = 50000;
         [HideInInspector] public int maxWalkers = 50000;
-        //multires
-        [Header("Multires dla Settings")]
-        [HideInInspector] public int baseSize = 64;
-        [HideInInspector] public float fillFraction = 0.5f;
-         public int jitterRange = 2;
+
+        [Header("Multiresolution DLA Settings")]
+        [HideInInspector] public int baseSize = 64; //starting grid size, this will scale up
+        [HideInInspector] public float fillFraction = 0.1f; //how much percentwise the grid needs to be filled before upscaling
+        [HideInInspector] public int crispBlurRadius = 3; // gaussian blur radius for upscaling crisp map
+        [HideInInspector] public int crispBlurStandardDeviation = 1; // gaussian blur standard deviation for upscaling crisp map
+        [HideInInspector] public int blurryBlurRadius = 3; // gaussian blur radius for upscaling blurry map
+        [HideInInspector] public int blurryBlurStandardDeviation = 1; // gaussian blur standard deviation for upscaling blurry map
+        [HideInInspector] public float lerpAlpha = 0.3f; // when adding the crisp to blurry this determines how much weight the crisp has
 
         [Header("Perlin noise settings")]
         [HideInInspector] public int perlinOctaves = 4;
@@ -203,115 +208,170 @@ namespace DLA {
             #endif
 
         }
+
         private void RunMultiResolutionDLA(CancellationToken token)
         {
-            Stopwatch stopwatch = Stopwatch.StartNew();
-            int[] levels = Utils.ComputeLevels(baseSize, resolution);
-            int currentSize = levels[0];
 
-            walkers = new List<Walker>();
+            Stopwatch stopwatch = Stopwatch.StartNew();
+            /*
+            get level sizes
+            initiate values
+            heightMapData is the blurred map
+            parent map holds all of the connections
+            depth map helps find the leaves and calculate weight map
+            DLAMap is the bool map that the walkers and drawing uses
+            run dla untill threshold
+
+            while running dla calculate parent, DLAMap and heightmapdata
+            do a blur and upscale using NN and blur it a bit using gaussian blurs
+            store this blurred map in old blurred map 
+            upscale the crisp map 
+            
+            --
+            run dla on this upscaled crisp map untill threshhold 
+            when this threshold is reached 
+            calculate the weight map by finding the leaf nodes and stepping up them using BFS
+            normalize that data to be from 0-1
+            blur this data depending on how deep we are 
+
+            finally add this data to the old blurred map we stored
+            then blur and upscalled the old map
+            and upscale the crisp map
+            --
+            repeat this section untill done 
+
+            */
+            List<int> levelSizes = Utils.ComputeLevels(baseSize, resolution);
+            if (levelSizes.Count == 0 || levelSizes[levelSizes.Count - 1] != resolution)
+            {
+                Debug.LogError($" cannot reach resolution {resolution} from baseSize {baseSize} by doubling {levelSizes.Count}");
+                return;
+            }
+
             Vector2Int root = new Vector2Int(baseSize / 2, baseSize / 2);
-            heightMapData = new float[baseSize, baseSize];
-            parentMap = new Vector2Int[baseSize, baseSize];
-            heightMapData[root.x, root.y] = 1f;
+
+            heightMapData = new float[baseSize, baseSize];  // blurry map holder
+            parentMap = new Vector2Int[baseSize, baseSize]; // holds directions to parent
+            DLAMap = new bool[baseSize, baseSize];          // crisp map holder
+            int[,] depthMap = new int[baseSize, baseSize];  // depth map holder
             for (int x = 0; x < baseSize; x++)
             {
                 for (int y = 0; y < baseSize; y++)
                 {
+                    depthMap[x, y] = -1;
                     parentMap[x, y] = Utils.SENTINEL;
+                    DLAMap[x, y] = false;
                 }
             }
-            parentMap[baseSize / 2, baseSize / 2] = new Vector2Int(0, 0);
+            depthMap[root.x, root.y] = 0;
+            parentMap[root.x, root.x] = new Vector2Int(0, 0);
+            DLAMap[root.x, root.y] = true; 
 
-            parentDict = new Dictionary<Vector2Int, Vector2Int>();
-            DLAMap = new bool[baseSize, baseSize];
-            DLAMap[root.x, root.y] = true;
-
-            for (int i = 0; i < levels.Length - 1; i++)
+            for (int i = 0; i < levelSizes.Count-1; i++)
             {
-                if (token.IsCancellationRequested) return;
-
-                int size = levels[i];
-                int nextSize = levels[i + 1];
-
-                int walkersToAdd = Mathf.FloorToInt(fillFraction * size * size);
-                RunDLALevel(size, walkersToAdd, token);
-
-                Vector2Int[,] upscaledDir = Utils.UpscaleDirectionMap1(parentMap);
-                bool[,] crispUpscale = Utils.BuildMapFromDirections(upscaledDir);
-
-                int[,] weightMap = Utils.CalculateWeights(upscaledDir);
-                float[,] crispHeight = Utils.ApplySmoothHeights(weightMap, smoothPower);
-
-                float[,] skeletonUps = Utils.UpscaleBilinear(heightMapData, nextSize);
-
-                float[,] blurredSkeletonUps = Utils.GaussianBlur(skeletonUps, /*radius=*/6, /*stdDev=*/2);
-
-                float[,] crispHeightNext = Utils.UpscaleBilinear(crispHeight, nextSize);
-
-                float[,] merged = new float[nextSize, nextSize];
-                for (int x = 0; x < nextSize; x++)
+             
+                int res = levelSizes[i];
+                Debug.Log(res);
+                if (token.IsCancellationRequested)
                 {
-                    for (int y = 0; y < nextSize; y++)
-                    {
-                        float rawDelta = crispHeightNext[x, y] - skeletonUps[x, y];
-                        float falloff = Mathf.SmoothStep(0, 1, skeletonUps[x, y]);
-                        merged[x, y] = blurredSkeletonUps[x, y] + rawDelta * falloff;
-                    }
+                    Debug.Log("MultiResolution DLA canceled");
+                    return;
                 }
 
-                currentSize = nextSize;
-                DLAMap = crispUpscale;
-                heightMapData = crispHeightNext;
-                parentMap = upscaledDir;
+              
+                root = new Vector2Int(res / 2, res / 2);
+
+                // run dla proccess
+                int thresholdCount = (int)Math.Floor((res * res) * fillFraction);
+                RunDLALevel(res, thresholdCount, depthMap, token);
+                if (i == 0)
+                {
+                    //first step only 
+                    for (int x = 0; x < res; x++)
+                    {
+                        for (int y = 0; y < res; y++)
+                        {
+                            heightMapData[x,y] = DLAMap[x, y] ? 1f : 0; // man cant cast bools to numbers in c#
+                            //first pass only calcualate base blurry map 
+                        } 
+                    }
+                    heightMapData = Utils.UpscaleAndBlur(heightMapData, blurryBlurRadius, blurryBlurStandardDeviation);
+                }
+                // upscaling crisp step now 
+                Vector2Int[,] newParent;
+                int[,] newDepth;
+                bool[,] crispMap;
+                Utils.UpscaleCrisp(parentMap, depthMap, DLAMap, out newParent, out newDepth, out crispMap);
+                parentMap = newParent;
+                depthMap = newDepth;
+                DLAMap = crispMap;
+
+                if (i != 0)
+                {
+                    // if its not first pass calculate weight map and add it to the heightmap
+                    // calculate weightmap 
+                    int[,] rawWeightMap = Utils.CalculateWeights(parentMap);
+                    float[,] crispWeightMap = Utils.ApplySmoothHeights(rawWeightMap, smoothPower, true);
+                    int blurAmount = crispBlurRadius * i; // scaled to depth
+                    int sigmaAmount = crispBlurStandardDeviation * i; // scaled to depth
+                    float[,] blurredWeightMap = Utils.GaussianBlur(crispWeightMap, blurAmount, sigmaAmount); // recomended standard deviation is ~ 1/3 of radius
+
+
+                    //initial concept for jiggling wasnt that good, this will just end up being unjiggled unfortunally  
+                    heightMapData = Utils.UpscaleAndBlur(heightMapData, blurryBlurRadius, blurryBlurStandardDeviation);
+                    heightMapData = Utils.LerpMaps(heightMapData, blurredWeightMap, lerpAlpha);
+                }
 
             }
+
+            stopwatch.Stop();
 
 #if UNITY_EDITOR
             EditorApplication.delayCall += () =>
             {
                 SaveDLAData();
                 PostProccessing();
-                stopwatch.Stop();
-                Debug.Log($"Multires DLA has taken {stopwatch.Elapsed.TotalSeconds:F3} time to run | resolution {resolution} | baseSize {baseSize} | fillFraction {fillFraction}");
+                Debug.Log($"MultiResolution DLA took {stopwatch.Elapsed.TotalSeconds:F3}s | final res {resolution}");
             };
 #else
-            stopwatch.Stop();
-            Debug.Log($"[MultiRes DLA] Total Time: {stopwatch.Elapsed.TotalSeconds:F3}s | final res {resolution}");
+            SaveDLAData();
+            PostProcessing();
+            Debug.Log($"MultiResolution DLA took {stopwatch.Elapsed.TotalSeconds:F3}s | final res {resolution}");
 #endif
         }
-        private void RunDLALevel(int size, int walkersToAdd, CancellationToken token)
+        void RunDLALevel(int size, int walkersToAdd, int[,] depthMap, CancellationToken token)
         {
             int stuckCount = 0;
             walkers = new List<Walker>();
 
             for (int i = 0; i < walkersToAdd; i++)
             {
-                walkers.Add(new Walker(DLAMap)); 
+                walkers.Add(new Walker(DLAMap));
             }
 
             while (stuckCount < walkersToAdd && !token.IsCancellationRequested)
             {
                 foreach (Walker walker in walkers)
                 {
+                    if (token.IsCancellationRequested) break;
                     if (walker.inPos) continue;
-                    if (walker.StepWalker(out Vector2Int walkerPos, out Vector2Int walkerStuckDir,diagonalWalk))
+
+                    if (walker.StepWalker(out Vector2Int walkerPos, out Vector2Int walkerStuckDir, diagonalWalk))
                     {
                         lock (mapLock)
                         {
-                            parentMap[walkerPos.x, walkerPos.y] = walkerStuckDir;
-                            DLAMap[walkerPos.x, walkerPos.y] = true;
-                            heightMapData[walkerPos.x, walkerPos.y] = 1f;
+                            depthMap[walkerPos.x, walkerPos.y] = depthMap[walkerPos.x + walkerStuckDir.x, walkerPos.y + walkerStuckDir.y] + 1;
+                            parentMap[walkerPos.x, walkerPos.y] = walkerStuckDir; // direction to parent
+                            DLAMap[walkerPos.x, walkerPos.y] = true;  // current map, we reinitialize at each step
                         }
                         stuckCount++;
-                        if (stuckCount >= walkersToAdd)
-                        { 
-                            break; 
-                        }
+                        if (stuckCount >= walkersToAdd) break;
                     }
                 }
             }
         }
+
+
         private void RunPerlinNoise(CancellationToken token)
         {
             int res = resolution;
@@ -536,10 +596,10 @@ namespace DLA {
                         }
                     }
                 }
-                if(parentMap!= null)
+                if (parentMap != null)
                 {
                     Gizmos.color = Color.cyan;
-                    for(int x = 0; x < size; x++) 
+                    for (int x = 0; x < size; x++)
                     {
                         for (int y = 0; y < size; y++)
                         {
@@ -550,12 +610,30 @@ namespace DLA {
                         }
                     }
                 }
-                if (walkers.Count == 0) return;
-                foreach (Walker walker in walkers)
+                if (walkers == null || walkers.Count == 0)
+                    return;
+
+                Walker[] snapshot = walkers.ToArray();
+
+                foreach (Walker walker in snapshot)
                 {
-                    if (walker == null|| walker.inPos) continue;
-                    Gizmos.color =new Color(0, 1, 0, 0.5f);
-                    Gizmos.DrawCube(new Vector3(walker.GetPos().x, 100, walker.GetPos().y), Vector3.one);
+                    if (walker == null || walker.inPos) continue;
+
+                    Gizmos.color = new Color(0, 1, 0, 0.5f);
+                    Vector3 pos3D = new Vector3(walker.GetPos().x, 100, walker.GetPos().y);
+                    Gizmos.DrawCube(pos3D, Vector3.one);
+                }
+                if (heightMapData != null)
+                {
+                    for (int x = 0; x < size; x++)
+                    {
+                        for (int y = 0; y < size; y++)  
+                        {
+                            Gizmos.color = Color.Lerp(Color.black, Color.white, heightMapData[x, y]);
+                            Gizmos.DrawCube(new Vector3(x,200,y), Vector3.one);
+                        }
+                        
+                    }
                 }
             }
          

@@ -16,6 +16,11 @@ namespace DLA
                 EditorGUILayout.HelpBox("base size for scaling, fill factor for how many walkers before increasing resolution", MessageType.Info);
                 EditorGUILayout.PropertyField(serializedObject.FindProperty("baseSize"));
                 EditorGUILayout.PropertyField(serializedObject.FindProperty("fillFraction"));
+                EditorGUILayout.PropertyField(serializedObject.FindProperty("crispBlurRadius"));
+                EditorGUILayout.PropertyField(serializedObject.FindProperty("crispBlurStandardDeviation"));
+                EditorGUILayout.PropertyField(serializedObject.FindProperty("blurryBlurRadius"));
+                EditorGUILayout.PropertyField(serializedObject.FindProperty("blurryBlurStandardDeviation"));
+                EditorGUILayout.PropertyField(serializedObject.FindProperty("lerpAlpha"));
             }
             else if(dlaRef.mode == TerrainMode.Basic)
             {
