@@ -19,6 +19,11 @@ namespace DLA {
             if (GUILayout.Button("Compare Coefficient"))
             {
                 evaluatorRef.CompareHeightsCoefficient();
+            }     
+            EditorGUILayout.Space();
+            if (GUILayout.Button("Load json heightmap"))
+            {
+                evaluatorRef.LoadHeightMap();
             }    
          /*   EditorGUILayout.Space();
             if (GUILayout.Button("Draw Histograms"))

@@ -11,9 +11,14 @@ namespace DLA
         //source https://tangrams.github.io/heightmapper/#2.315/2.38/47.21
         public Texture2D generatedHeightMap;
         public Texture2D realHeightMap;
+        public Texture2D[] realHeightMapList;
         public double result = 0;
         public float[,] genAsFloat;
         public float[,] realAsFloat;
+
+        [Header("heightmap json")]
+        public TextAsset heightmapJson;
+        [HideInInspector] public float[,] loadedHeightMap;
 
         [Header("Gizmo Settings")]
         public float gizmoBarWidth = 0.1f;
@@ -32,6 +37,7 @@ namespace DLA
             float[] normGen = NormalizeHistogram(hisGen);
             float[] normReal = NormalizeHistogram(hisReal);
             result = ChiSquared(normGen, normReal);
+            Debug.Log($"Chi results {result}");
             return result;
         }
         public double CompareHeightsCoefficient()
@@ -45,8 +51,49 @@ namespace DLA
             float[] normReal = NormalizeHistogram(hisReal);
 
             result = CorrelationCoefficient(normGen, normReal);
+            Debug.Log($"Coefficient results {result}");
             return result;
         }
+        public void LoadHeightMap()
+        {
+            if (heightmapJson == null)
+            {
+                Debug.LogError("no json file assigned");
+                return;
+            }
+
+            DLADataJson container;
+            try
+            {
+                container = JsonUtility.FromJson<DLADataJson>(heightmapJson.text);
+            }
+            catch (Exception e)
+            {
+                Debug.LogError($"failed to read file {e.Message}");
+                return;
+            }
+
+            int size = container.size;
+            if (container.heightMapData == null || container.heightMapData.Length != size * size)
+            {
+                Debug.LogError($"unexpected length, expected {size * size}, got {container.heightMapData?.Length}");
+                return;
+            }
+
+            loadedHeightMap = new float[size, size];
+            for (int x = 0; x < size; x++)
+            {
+                for (int y = 0; y < size; y++)
+                {
+                    int i = x * size + y;
+                    loadedHeightMap[x, y] = container.heightMapData[i];
+                }
+            }
+
+            Debug.Log($"loaded height map size ({size}x{size})");
+        }
+
+
         private void DrawHistogramGizmos(float[] histogram, Vector3 origin, Color color)
         {
             Gizmos.color = color;
@@ -210,34 +257,34 @@ namespace DLA
             return covarianceSum / Math.Sqrt(varianceGen * varianceReal);
         }
 
-        public static float[,] ConvertTextureToFloatArray(Texture2D tex, int res)
+        public static float[,] ConvertTextureToFloatArray(Texture2D tex, int size)
         {
             if (tex == null)
             {
-                Debug.LogError("TextureUtility.ConvertTextureToFloatArray: tex is null.");
+                Debug.LogError("null text");
                 return null;
             }
 
-            if (res <= 0)
+            if (size <= 0)
             {
-                Debug.LogError("TextureUtility.ConvertTextureToFloatArray: Resolution must be greater than zero.");
+                Debug.LogError("tex size doesnt match");
                 return null;
             }
 
             if (tex.width != tex.height)
             {
-                Debug.LogWarning("TextureUtility.ConvertTextureToFloatArray: Source texture is not square. Results may be distorted.");
+                Debug.LogWarning("tex not square");
             }
 
-            float[,] result = new float[res, res];
+            float[,] result = new float[size, size];
 
-            for (int y = 0; y < res; y++)
+            for (int y = 0; y < size; y++)
             {
-                float v = (y + 0.5f) / res;
+                float v = (y + 0.5f) / size;
 
-                for (int x = 0; x < res; x++)
+                for (int x = 0; x < size; x++)
                 {
-                    float u = (x + 0.5f) / res;
+                    float u = (x + 0.5f) / size;
 
                     Color sampledColor = tex.GetPixelBilinear(u, v);
 
