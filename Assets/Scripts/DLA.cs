@@ -84,7 +84,7 @@ namespace DLA {
         [HideInInspector] public float perlinLacunarity = 2.0f;
         [HideInInspector] public int perlinSeed = 42;
 
-        [Header("Post proccessing options")]
+        [Header("Post processing options")]
         public bool autoExpose = false;
         public bool blur = false;
         public bool weightFalloff = false;
@@ -249,7 +249,7 @@ namespace DLA {
                 Debug.Log($"Settings: resolution({resolution}), maxWalkers(maxWalkers), walkerCount(walkerCount)");
                 SaveDLAData();
                 
-                PostProccessing();
+                PostProcessing();
             };
             #else
 
@@ -375,7 +375,7 @@ namespace DLA {
             EditorApplication.delayCall += () =>
             {
                 SaveDLAData();
-                PostProccessing();
+                PostProcessing();
                 Debug.Log($"Settings: baseSize({baseSize}), fillFraction({fillFraction}), " +
                     $"crispBlurRadius({crispBlurRadius}), crispBlurStandardDeviation({crispBlurStandardDeviation})," +
                     $"blurryBlurRadius({blurryBlurRadius}),(blurryBlurStandardDeviation({blurryBlurStandardDeviation})," +
@@ -501,7 +501,7 @@ namespace DLA {
 #endif
         }
 
-        public void PostProccessing()
+        public void PostProcessing()
         {
             if (heightMapData == null || heightMapData.Length == 0)
             {

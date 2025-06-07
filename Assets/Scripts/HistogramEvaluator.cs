@@ -1,3 +1,5 @@
+// Ignore Spelling: Json
+
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -62,6 +64,7 @@ namespace DLA
             float[] normJson = NormalizeHistogram(histJson);
 
             double[] results = new double[realHeightMapList.Length];
+            double average = 0;
             for (int i = 0; i < realHeightMapList.Length; i++)
             {
                 Texture2D realTex = realHeightMapList[i];
@@ -77,10 +80,13 @@ namespace DLA
                 float[] normReal = NormalizeHistogram(histReal);
 
                 double chi = ChiSquared(normJson, normReal);
+                average += chi;
                 results[i] = chi;
-                Debug.Log($"JSON vs realHeightMapList[{i}] chi = {chi}");
+                Debug.Log($"JSON vs {realTex.name}: chi = {chi}");
             }
-
+            average = average / realHeightMapList.Length;
+            result = average;
+            Debug.Log($"Average chisqr score = {average}");
             return results;
         }
 
@@ -92,6 +98,7 @@ namespace DLA
             float[] normJson = NormalizeHistogram(histJson);
 
             double[] results = new double[realHeightMapList.Length];
+            double average = 0;
             for (int i = 0; i < realHeightMapList.Length; i++)
             {
                 Texture2D realTex = realHeightMapList[i];
@@ -107,40 +114,16 @@ namespace DLA
                 float[] normReal = NormalizeHistogram(histReal);
 
                 double coeff = CorrelationCoefficient(normJson, normReal);
+                average += coeff;
                 results[i] = coeff;
-                Debug.Log($"JSON vs realHeightMapList[{i}] coefficient = {coeff}");
+                Debug.Log($"JSON vs {realTex.name}: coefficient = {coeff}");
             }
-
+            average = average / realHeightMapList.Length;
+            result = average;
+            Debug.Log($"Average coefficient score = {average}");
             return results;
         }
-        public double CompareHeightsChiAvarage()
-        {
-
-            float[,] gen = LoadHeightmap(generatedHeightMap);
-            float[,] real = LoadHeightmap(realHeightMap);
-            int[] hisGen = ComputeHistogram(gen);
-            int[] hisReal = ComputeHistogram(real);
-
-            float[] normGen = NormalizeHistogram(hisGen);
-            float[] normReal = NormalizeHistogram(hisReal);
-            result = ChiSquared(normGen, normReal);
-            Debug.Log($"Chi results {result}");
-            return result;
-        }
-        public double CompareHeightsCoefficienAvarage()
-        {
-            float[,] gen = LoadHeightmap(generatedHeightMap);
-            float[,] real = LoadHeightmap(realHeightMap);
-            int[] hisGen = ComputeHistogram(gen);
-            int[] hisReal = ComputeHistogram(real);
-
-            float[] normGen = NormalizeHistogram(hisGen);
-            float[] normReal = NormalizeHistogram(hisReal);
-
-            result = CorrelationCoefficient(normGen, normReal);
-            Debug.Log($"Coefficient results {result}");
-            return result;
-        }
+      
         public void LoadMapJson()
         {
             if (heightmapJson == null)
@@ -197,7 +180,6 @@ namespace DLA
             }
         }
 
-
         float[,] LoadHeightmap(Texture2D map, int res = 513)
         {
 
@@ -209,7 +191,7 @@ namespace DLA
 
             if (map.width != map.height)
             {
-                Debug.LogWarning("source not square");
+                Debug.LogWarning($"source not square {map.name}");
             }
             float[,] result = new float[res, res];
 
@@ -255,8 +237,8 @@ namespace DLA
         int[] ComputeHistogram(float[,] map)
         {
             List<float> heights = new List<float>();
-
-            heights = FlattenHeights(map);
+            
+            heights = FlattenHeights((map));
 
             float minH = heights.Min();
             float maxH = heights.Max();
@@ -337,7 +319,7 @@ namespace DLA
 
             if (size <= 0)
             {
-                Debug.LogError("tex size doesnt match");
+                Debug.LogError("tex size doesn't match");
                 return null;
             }
 
@@ -365,6 +347,24 @@ namespace DLA
             }
 
             return result;
+        }
+        float[,] NormalizeMap(float[,] map)
+        {
+            int size = map.GetLength(0);
+            float min = map.Cast<float>().Min();
+            float max = map.Cast<float>().Max();
+
+            float range = Mathf.Max(max - min, 1e-6f);
+
+            float[,] norm = new float[size, size];
+            for (int x = 0; x < size; x++)
+            {
+                for (int y = 0; y < size; y++)
+                {
+                    norm[x, y] = (map[x, y] - min) / range;
+                }
+            }
+            return norm;
         }
 
         private void OnDrawGizmos()

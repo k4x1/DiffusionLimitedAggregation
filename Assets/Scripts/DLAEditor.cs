@@ -52,7 +52,7 @@ namespace DLA
             EditorGUILayout.Space();
             if (GUILayout.Button("Do post proccessing"))
             {
-                dlaRef.PostProccessing();
+                dlaRef.PostProcessing();
             }
             serializedObject.ApplyModifiedProperties();
         }
