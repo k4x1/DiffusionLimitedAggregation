@@ -54,7 +54,94 @@ namespace DLA
             Debug.Log($"Coefficient results {result}");
             return result;
         }
-        public void LoadHeightMap()
+        public double[] CompareJsonToRealListChi()
+        {
+            if (loadedHeightMap == null) LoadMapJson();
+
+            int[] histJson = ComputeHistogram(loadedHeightMap);
+            float[] normJson = NormalizeHistogram(histJson);
+
+            double[] results = new double[realHeightMapList.Length];
+            for (int i = 0; i < realHeightMapList.Length; i++)
+            {
+                Texture2D realTex = realHeightMapList[i];
+                if (realTex == null)
+                {
+                    Debug.LogWarning($"realHeightMapList[{i}] is null");
+                    results[i] = double.NaN;
+                    continue;
+                }
+
+                float[,] realMap = LoadHeightmap(realTex);
+                int[] histReal = ComputeHistogram(realMap);
+                float[] normReal = NormalizeHistogram(histReal);
+
+                double chi = ChiSquared(normJson, normReal);
+                results[i] = chi;
+                Debug.Log($"JSON vs realHeightMapList[{i}] chi = {chi}");
+            }
+
+            return results;
+        }
+
+        public double[] CompareJsonToRealListCoefficient()
+        {
+            if (loadedHeightMap == null) LoadMapJson();
+
+            int[] histJson = ComputeHistogram(loadedHeightMap);
+            float[] normJson = NormalizeHistogram(histJson);
+
+            double[] results = new double[realHeightMapList.Length];
+            for (int i = 0; i < realHeightMapList.Length; i++)
+            {
+                Texture2D realTex = realHeightMapList[i];
+                if (realTex == null)
+                {
+                    Debug.LogWarning($"realHeightMapList[{i}] is null");
+                    results[i] = double.NaN;
+                    continue;
+                }
+
+                float[,] realMap = LoadHeightmap(realTex);
+                int[] histReal = ComputeHistogram(realMap);
+                float[] normReal = NormalizeHistogram(histReal);
+
+                double coeff = CorrelationCoefficient(normJson, normReal);
+                results[i] = coeff;
+                Debug.Log($"JSON vs realHeightMapList[{i}] coefficient = {coeff}");
+            }
+
+            return results;
+        }
+        public double CompareHeightsChiAvarage()
+        {
+
+            float[,] gen = LoadHeightmap(generatedHeightMap);
+            float[,] real = LoadHeightmap(realHeightMap);
+            int[] hisGen = ComputeHistogram(gen);
+            int[] hisReal = ComputeHistogram(real);
+
+            float[] normGen = NormalizeHistogram(hisGen);
+            float[] normReal = NormalizeHistogram(hisReal);
+            result = ChiSquared(normGen, normReal);
+            Debug.Log($"Chi results {result}");
+            return result;
+        }
+        public double CompareHeightsCoefficienAvarage()
+        {
+            float[,] gen = LoadHeightmap(generatedHeightMap);
+            float[,] real = LoadHeightmap(realHeightMap);
+            int[] hisGen = ComputeHistogram(gen);
+            int[] hisReal = ComputeHistogram(real);
+
+            float[] normGen = NormalizeHistogram(hisGen);
+            float[] normReal = NormalizeHistogram(hisReal);
+
+            result = CorrelationCoefficient(normGen, normReal);
+            Debug.Log($"Coefficient results {result}");
+            return result;
+        }
+        public void LoadMapJson()
         {
             if (heightmapJson == null)
             {
@@ -110,23 +197,6 @@ namespace DLA
             }
         }
 
-        private void OnDrawGizmos()
-        {
-            if (generatedHeightMap == null || realHeightMap == null) return;
-
-            genAsFloat = LoadHeightmap(generatedHeightMap);
-            realAsFloat = LoadHeightmap(realHeightMap);
-            int[] hisGen = ComputeHistogram(genAsFloat);
-            int[] hisReal = ComputeHistogram(realAsFloat);
-            float[] normGen = NormalizeHistogram(hisGen);
-            float[] normReal = NormalizeHistogram(hisReal);
-
-            Vector3 originGen = transform.position;
-            DrawHistogramGizmos(normGen, originGen, Color.red);
-
-            Vector3 originReal = transform.position + Vector3.right * (normGen.Length * gizmoBarWidth + histogramSpacing);
-            DrawHistogramGizmos(normReal, originReal, Color.blue);
-        }
 
         float[,] LoadHeightmap(Texture2D map, int res = 513)
         {
@@ -295,6 +365,24 @@ namespace DLA
             }
 
             return result;
+        }
+
+        private void OnDrawGizmos()
+        {
+            if (generatedHeightMap == null || realHeightMap == null) return;
+
+            genAsFloat = LoadHeightmap(generatedHeightMap);
+            realAsFloat = LoadHeightmap(realHeightMap);
+            int[] hisGen = ComputeHistogram(genAsFloat);
+            int[] hisReal = ComputeHistogram(realAsFloat);
+            float[] normGen = NormalizeHistogram(hisGen);
+            float[] normReal = NormalizeHistogram(hisReal);
+
+            Vector3 originGen = transform.position;
+            DrawHistogramGizmos(normGen, originGen, Color.red);
+
+            Vector3 originReal = transform.position + Vector3.right * (normGen.Length * gizmoBarWidth + histogramSpacing);
+            DrawHistogramGizmos(normReal, originReal, Color.blue);
         }
     }
 }

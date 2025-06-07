@@ -19,11 +19,21 @@ namespace DLA {
             if (GUILayout.Button("Compare Coefficient"))
             {
                 evaluatorRef.CompareHeightsCoefficient();
-            }     
+            }
+            EditorGUILayout.Space();
+            if (GUILayout.Button("Compare Chi avarage"))
+            {
+                evaluatorRef.CompareJsonToRealListChi();
+            }
+            EditorGUILayout.Space();
+            if (GUILayout.Button("Compare Coefficient avarage"))
+            {
+                evaluatorRef.CompareJsonToRealListCoefficient();
+            }
             EditorGUILayout.Space();
             if (GUILayout.Button("Load json heightmap"))
             {
-                evaluatorRef.LoadHeightMap();
+                evaluatorRef.LoadMapJson();
             }    
          /*   EditorGUILayout.Space();
             if (GUILayout.Button("Draw Histograms"))
