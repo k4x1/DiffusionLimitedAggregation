@@ -10,16 +10,7 @@ namespace DLA {
 
             HistogramEvaluator evaluatorRef = (HistogramEvaluator)target;
 
-          /*  EditorGUILayout.Space();
-            if (GUILayout.Button("Compare Chi"))
-            {
-                evaluatorRef.CompareHeightsChi();
-            }
-            EditorGUILayout.Space();
-            if (GUILayout.Button("Compare Coefficient"))
-            {
-                evaluatorRef.CompareHeightsCoefficient();
-            }*/
+      
             EditorGUILayout.Space();
             if (GUILayout.Button("Compare Chi average"))
             {
@@ -35,11 +26,17 @@ namespace DLA {
             {
                 evaluatorRef.LoadMapJson();
             }
-         /*   EditorGUILayout.Space();
-            if (GUILayout.Button("Draw Histograms"))
+            EditorGUILayout.Space();
+            if (GUILayout.Button("Compare Chi single"))
             {
-                evaluatorRef.DrawHistograms();
-            }*/
+                evaluatorRef.CompareHeightsChi();
+            }
+            EditorGUILayout.Space();
+            if (GUILayout.Button("Compare Coefficient single"))
+            {
+                evaluatorRef.CompareHeightsCoefficient();
+            }
+     
         }
     }
 }

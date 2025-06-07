@@ -60,7 +60,7 @@ namespace DLA {
 
 
         public bool convexHull = false;
-        public float maxHullEdgeGap = 12;
+        public float hullUpscale = 1.2f;
 
 
         //basic
@@ -155,20 +155,12 @@ namespace DLA {
             if (noiseGuided)
             {
                 noiseField = Utils.InitializeNoiseField(resolution, noiseFieldScale);
-                CreateHeightMapQuad(noiseField, -resolution * 0.5f, resolution * 0.5f, ref noiseFieldQuad, ref noiseFieldTex);
+                CreateMapQuad(noiseField, -resolution * 0.5f, resolution * 0.5f, ref noiseFieldQuad, ref noiseFieldTex, "NoiseField");
             }
 
             Task.Run(() => {
 
-                DLAMap = new bool[resolution, resolution];
-                parentMap = new Vector2Int[resolution, resolution];
-                for (int i = 0; i < resolution; i++)
-                {
-                    for (int j = 0; j < resolution; j++)
-                    {
-                        parentMap[i, j] = Utils.SENTINEL;
-                    }
-                }
+      
 
                 switch (mode)
                 {
@@ -210,23 +202,47 @@ namespace DLA {
             }
             Utils.jitterOffsets.Clear();
 
+            walkers = new List<Walker>();
+            heightMapData = new float[resolution, resolution];
+            clusterPoints = new List<Vector2Int>();
+            hullPoints = new List<Vector2Int>();
+            DLAMap = new bool[resolution, resolution];
+            parentMap = new Vector2Int[resolution, resolution];
+            for (int i = 0; i < resolution; i++)
+            {
+                for (int j = 0; j < resolution; j++)
+                {
+                    parentMap[i, j] = Utils.SENTINEL;
+                }
+            }
+#if UNITY_EDITOR
+            EditorApplication.delayCall += () => {
+/*                if (heightQuad != null) DestroyImmediate(heightQuad);
+                if (noiseFieldQuad != null) DestroyImmediate(noiseFieldQuad);*/
+            };
+#else
+    if (heightQuad     != null) Destroy(heightQuad);
+    if (noiseFieldQuad != null) Destroy(noiseFieldQuad);
+#endif
+            heightQuad = null;
+            noiseFieldQuad = null;
+
+            heightTex = null;
+            noiseFieldTex = null;
+            noiseField = null;
 
         }
 
         private void RunDLA(CancellationToken token)
         {
-            walkers = new List<Walker>();
 
             Vector2Int root = new Vector2Int(resolution / 2, resolution / 2);
 
-            heightMapData = new float[resolution, resolution];
             DLAMap[root.x, root.y] = true;
-
-            clusterPoints = new List<Vector2Int>();
-            hullPoints = new List<Vector2Int>();
             clusterPoints.Add(root);
             hullPoints.Add(root);
 
+        
 
             int stuckCount = 0;
             int centerX = resolution / 2;
@@ -294,7 +310,7 @@ namespace DLA {
             if (convexHull && clusterPoints.Count > 2)
             {
                 List<Vector2Int> hull = Utils.ConvexHull(clusterPoints);
-                hullPoints = Utils.ScalePolygon(hullPoints, 1f);
+                hullPoints = Utils.ScalePolygon(hullPoints, hullUpscale);
             }
         }
         Walker InstantiateWalker()
@@ -663,7 +679,7 @@ namespace DLA {
 
             if (createHeightTexture)
             {
-                CreateHeightMapQuad(heightMapData,resolution*1.5f,resolution*0.5f, ref heightQuad, ref heightTex);
+                CreateMapQuad(heightMapData,resolution*1.5f,resolution*0.5f, ref heightQuad, ref heightTex, "HeightMap");
             }
 
             TerrainData tData = terrain.terrainData;
@@ -783,11 +799,21 @@ namespace DLA {
                 return false;
             }
         }
-        void CreateHeightMapQuad(float[,] data, float posX, float posZ, ref GameObject quadPrefab, ref Texture2D quadTexture)
+        void CreateMapQuad(float[,] map, float posX, float posZ, ref GameObject quadPrefab, ref Texture2D quadTexture, string name = "MapQuad")
         {
-            if (data == null || data.Length == 0) return;
-
-            int size = data.GetLength(0);
+            if (map == null || map.Length == 0) return;
+            for (int i = transform.childCount - 1; i >= 0; i--)
+            {
+                Transform child = transform.GetChild(i);
+                if (child.name == name) {
+#if UNITY_EDITOR
+                    DestroyImmediate(child.gameObject);
+#else
+                    Destroy(child.gameObject);
+#endif
+                }
+            }
+            int size = map.GetLength(0);
 
             if (quadTexture == null || quadTexture.width != size)
             {
@@ -800,7 +826,7 @@ namespace DLA {
             {
                 for (int y = 0; y < size; y++)
                 {
-                    float height = Mathf.Clamp01(data[x, y]);
+                    float height = Mathf.Clamp01(map[x, y]);
                     quadTexture.SetPixel(x, y, new Color(height, height, height, 1f));
                 }
             }
@@ -809,7 +835,7 @@ namespace DLA {
             if (quadPrefab == null)
             {
                 quadPrefab = GameObject.CreatePrimitive(PrimitiveType.Quad);
-                quadPrefab.name = "MapQuad";
+                quadPrefab.name = name;
 
                 MeshRenderer mr = quadPrefab.GetComponent<MeshRenderer>();
                 mr.sharedMaterial = new Material(Shader.Find("Unlit/Texture"));
@@ -819,6 +845,7 @@ namespace DLA {
             quadPrefab.transform.rotation = Quaternion.Euler(90f, 0f, 0f);
             float worldSize = size;
             quadPrefab.transform.localScale = new Vector3(worldSize, worldSize, 1f);
+            quadPrefab.transform.parent = transform;
 
             MeshRenderer renderer = quadPrefab.GetComponent<MeshRenderer>();
             renderer.sharedMaterial.mainTexture = quadTexture;
@@ -861,7 +888,7 @@ namespace DLA {
                 }
                 if (drawWalkers && walkers != null && walkers.Count > 0 )
                 {
-                     Walker[] snapshot = walkers.ToArray();
+                     Walker[] snapshot = walkers.ToArray(); 
 
                     foreach (Walker walker in snapshot)
                     {

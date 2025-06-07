@@ -11,8 +11,8 @@ namespace DLA
     public class HistogramEvaluator : MonoBehaviour
     {
         //source https://tangrams.github.io/heightmapper/#2.315/2.38/47.21
-        public Texture2D generatedHeightMap;
-        public Texture2D realHeightMap;
+        public Texture2D heighMapA;
+        public Texture2D heightMapB;
         public Texture2D[] realHeightMapList;
         public double result = 0;
         public float[,] genAsFloat;
@@ -31,8 +31,8 @@ namespace DLA
         public double CompareHeightsChi()
         {
 
-            float[,] gen = LoadHeightmap(generatedHeightMap);
-            float[,] real = LoadHeightmap(realHeightMap);
+            float[,] gen = LoadHeightmap(heighMapA);
+            float[,] real = LoadHeightmap(heightMapB);
             int[] hisGen = ComputeHistogram(gen);
             int[] hisReal = ComputeHistogram(real);
 
@@ -44,8 +44,8 @@ namespace DLA
         }
         public double CompareHeightsCoefficient()
         {
-            float[,] gen = LoadHeightmap(generatedHeightMap);
-            float[,] real = LoadHeightmap(realHeightMap);
+            float[,] gen = LoadHeightmap(heighMapA);
+            float[,] real = LoadHeightmap(heightMapB);
             int[] hisGen = ComputeHistogram(gen);
             int[] hisReal = ComputeHistogram(real);
 
@@ -179,7 +179,7 @@ namespace DLA
                 Gizmos.DrawLine(start, end);
             }
         }
-
+ 
         float[,] LoadHeightmap(Texture2D map, int res = 513)
         {
 
@@ -369,10 +369,10 @@ namespace DLA
 
         private void OnDrawGizmos()
         {
-            if (generatedHeightMap == null || realHeightMap == null) return;
+            if (heighMapA == null || heightMapB == null) return;
 
-            genAsFloat = LoadHeightmap(generatedHeightMap);
-            realAsFloat = LoadHeightmap(realHeightMap);
+            genAsFloat = LoadHeightmap(heighMapA);
+            realAsFloat = LoadHeightmap(heightMapB);
             int[] hisGen = ComputeHistogram(genAsFloat);
             int[] hisReal = ComputeHistogram(realAsFloat);
             float[] normGen = NormalizeHistogram(hisGen);

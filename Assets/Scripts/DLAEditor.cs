@@ -50,7 +50,7 @@ namespace DLA
             }
 
             EditorGUILayout.Space();
-            if (GUILayout.Button("Run task DLA"))
+            if (GUILayout.Button("Run DLA"))
             {
                 dlaRef.StartTaskDLA();
             }           
