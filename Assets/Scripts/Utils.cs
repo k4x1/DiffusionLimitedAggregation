@@ -421,54 +421,7 @@ namespace DLA
             lower.AddRange(upper);
             return lower;
         }
-        public static List<Vector2Int> RefineHull(List<Vector2Int> hull, List<Vector2Int> allPts, float maxGap)
-        {
-            bool inserted;
-            do
-            {
-                inserted = false;
-                List<Vector2Int> newHull = new List<Vector2Int>();
-
-                for (int i = 0; i < hull.Count; i++)
-                {
-                    Vector2Int pointA = hull[i];
-                    Vector2Int pointB = hull[(i + 1) % hull.Count];
-                    newHull.Add(pointA);
-
-                    float edgeLen = Vector2Int.Distance(pointA, pointB);
-                    if (edgeLen > maxGap)
-                    {
-                        float bestDist = 0f;
-                        Vector2Int bestPoint = default;
-                        Vector2 edge = (pointB - pointA).ToVector2();
-                        for (int j = 0; j < allPts.Count; j++)
-                        {
-                            Vector2Int point = allPts[j];
-                            Vector2 toPoint = (point - pointA).ToVector2();
-                            float t = Vector2.Dot(toPoint, edge) / edge.sqrMagnitude;
-                            if (t <= 0 || t >= 1) continue;
-                            Vector2 proj = pointA.ToVector2() + edge * t;
-                            float currDistance = Vector2.Distance(point.ToVector2(), proj);
-                            if (currDistance > bestDist)
-                            {
-                                bestDist = currDistance;
-                                bestPoint = point;
-                            }
-                        }
-
-                        if (bestDist > 0f && Vector2Int.Distance(pointA, bestPoint) <= maxGap && Vector2Int.Distance(bestPoint, pointB) <= maxGap)
-                        {
-                            newHull.Add(bestPoint);
-                            inserted = true;
-                            Debug.Log("refined");
-                        }
-                    }
-                }
-                hull = newHull;
-            } while (inserted);
-            return hull;
-        }
-        
+     
         
         public static List<Vector2Int> ScalePolygon(List<Vector2Int> polygon, float scale)
         {

@@ -294,8 +294,7 @@ namespace DLA {
             if (convexHull && clusterPoints.Count > 2)
             {
                 List<Vector2Int> hull = Utils.ConvexHull(clusterPoints);
-                hullPoints = Utils.RefineHull(hull, clusterPoints, maxHullEdgeGap);
-                //hullPoints = Utils.ScalePolygon(hullPoints, 1f);
+                hullPoints = Utils.ScalePolygon(hullPoints, 1f);
             }
         }
         Walker InstantiateWalker()
