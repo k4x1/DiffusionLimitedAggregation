@@ -1,3 +1,5 @@
+using System;
+using System.Collections.Generic;
 using UnityEngine;
 namespace DLA
 {
@@ -28,27 +30,52 @@ namespace DLA
         // have to use system.rnd because unity doesnt support tasks
 
         Vector2Int pos = new Vector2Int(0, 0);
-        bool[,] DLAmap;
+        bool[,] DLAMap;
         public bool inPos = false;
         public int maxSteps = 100;
         public int stepCount = 0;
         public Vector2Int directionToConnection;
-        public Walker(bool[,] map)
-        {
+        public Walker(bool[,] map, List<Vector2Int> hull = null)
+        {   
             int seed;
             lock (rndLock)
             {
                 seed = globalRnd.Next(); 
             }
             rnd = new System.Random(seed);
-            DLAmap = map;
-            pos = new Vector2Int(rnd.Next(0,DLAmap.GetLength(0)), rnd.Next(0, DLAmap.GetLength(1)));
+            DLAMap = map;
+            int mapSize = DLAMap.GetLength(0);
+            if (hull != null && hull.Count > 1)
+            {
+                int edgeIndex = rnd.Next(hull.Count);
+                Vector2Int startPoint = hull[edgeIndex];
+                Vector2Int endPoint = hull[(edgeIndex + 1) % hull.Count];
+                
+                // entire line
+                Vector2Int edgeVector = new Vector2Int(endPoint.x - startPoint.x, endPoint.y - startPoint.y);
+                
+                //gets points in the line
+                int steps = Utils.EuclidsAlgorithm(Mathf.Abs(edgeVector.x), Mathf.Abs(edgeVector.y));
+                Vector2Int step = new Vector2Int(edgeVector.x / steps, edgeVector.y / steps);
+                
+                //pick random point in the edge
+                int stepIndex = rnd.Next(0, steps + 1);
+                Vector2Int spawn = new Vector2Int(startPoint.x + step.x * stepIndex, startPoint.y + step.y * stepIndex);
+
+
+                pos = new Vector2Int(Mathf.Clamp(spawn.x, 0, mapSize - 1), Mathf.Clamp(spawn.y, 0, mapSize - 1));   
+                   
+            }
+            else
+            {
+                pos = new Vector2Int(rnd.Next(0, mapSize), rnd.Next(0, mapSize));
+            }
         }
         public bool StepWalker(out Vector2Int stuckPos, out Vector2Int dirToConnection, bool diagonal = true)
         {
             stuckPos = Vector2Int.zero;
             dirToConnection = Vector2Int.zero;
-            int size = DLAmap.GetLength(0);
+            int size = DLAMap.GetLength(0);
             Vector2Int[] choices = diagonal
             ? diagonalDirections
             : directions;
@@ -59,7 +86,7 @@ namespace DLA
 
             if (newPos.x < 0 || newPos.x >= size || newPos.y < 0 || newPos.y >= size) return false;
 
-            if (DLAmap[newPos.x, newPos.y])
+            if (DLAMap[newPos.x, newPos.y])
             {
                 stuckPos = pos;
                 dirToConnection = offset;
@@ -82,7 +109,7 @@ namespace DLA
         {
             stuckPos = Vector2Int.zero;
             dirToConnection = Vector2Int.zero;
-            int size = DLAmap.GetLength(0);
+            int size = DLAMap.GetLength(0);
 
             Vector2Int[] choices = diagonal ? diagonalDirections : directions;
             int choiceCount = choices.Length;
@@ -139,7 +166,7 @@ namespace DLA
             }
 
             // check map for stuck 
-            if (DLAmap[newPos.x, newPos.y])
+            if (DLAMap[newPos.x, newPos.y])
             {
                 stuckPos = pos;
                 dirToConnection = chosenOffset;

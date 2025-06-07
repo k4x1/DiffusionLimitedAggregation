@@ -11,7 +11,7 @@ namespace DLA
             DrawDefaultInspector();
 
             DLA dlaRef = (DLA)target;
-            if (dlaRef.mode == TerrainMode.MultiResolution)
+            if (dlaRef.mode == TerrainMode.MultiResolutionDLA)
             {
                 EditorGUILayout.HelpBox("base size for scaling, fill factor for how many walkers before increasing resolution", MessageType.Info);
                 EditorGUILayout.PropertyField(serializedObject.FindProperty("baseSize"));
@@ -22,7 +22,7 @@ namespace DLA
                 EditorGUILayout.PropertyField(serializedObject.FindProperty("blurryBlurStandardDeviation"));
                 EditorGUILayout.PropertyField(serializedObject.FindProperty("lerpAlpha"));
             }
-            else if(dlaRef.mode == TerrainMode.Basic)
+            else if(dlaRef.mode == TerrainMode.BasicDLA)
             {
                 EditorGUILayout.HelpBox("walker count is how many it starts with, max walkers is max clump amount", MessageType.Info);
                 EditorGUILayout.PropertyField(serializedObject.FindProperty("walkerCount"));
@@ -37,6 +37,16 @@ namespace DLA
                 EditorGUILayout.PropertyField(serializedObject.FindProperty("perlinPersistence"));
                 EditorGUILayout.PropertyField(serializedObject.FindProperty("perlinLacunarity"));
                 EditorGUILayout.PropertyField(serializedObject.FindProperty("perlinSeed"));
+            }
+            else if (dlaRef.mode == TerrainMode.SimplexNoise)
+            {
+                EditorGUILayout.HelpBox("octaves is noise layer count, base scale is scale of first noise layer, " +
+                    "persistance is how much it falls off, lacunarity is how much the frequency increases, seed is for rng", MessageType.Info);
+                EditorGUILayout.PropertyField(serializedObject.FindProperty("simplexOctaves"));
+                EditorGUILayout.PropertyField(serializedObject.FindProperty("simplexBaseScale"));
+                EditorGUILayout.PropertyField(serializedObject.FindProperty("simplexPersistence"));
+                EditorGUILayout.PropertyField(serializedObject.FindProperty("simplexLacunarity"));
+                EditorGUILayout.PropertyField(serializedObject.FindProperty("simplexSeed"));
             }
 
             EditorGUILayout.Space();

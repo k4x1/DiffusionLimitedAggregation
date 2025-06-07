@@ -123,34 +123,6 @@ namespace DLA
 
             return norm;
         }
-        public static float[,] AddMultidimensionalFloats(float[,] a, float[,] b, float multiplicationFactorOfB = 1)
-        {
-            int width = a.GetLength(0);
-            int height = a.GetLength(1);
-            float[,] combined = new float[width, height];
-            for (int i = 0; i < width; i++)
-            {
-                for (int j = 0; j < height; j++)
-                {
-                    combined[i, j] = a[i, j] + b[i, j] * multiplicationFactorOfB;
-                }
-            }
-            return combined;
-        }
-        public static float[,] MultiplyMultidimensionalFloats(float[,] a, float b)
-        {
-            int width = a.GetLength(0);
-            int height = a.GetLength(1);
-            float[,] combined = new float[width, height];
-            for (int i = 0; i < width; i++)
-            {
-                for (int j = 0; j < height; j++)
-                {
-                    combined[i, j] = a[i, j] * b;
-                }
-            }
-            return combined;
-        }
         public static int[,] CalculateWeights(Vector2Int[,] dirMap)
         {
             int res = dirMap.GetLength(0);
@@ -262,83 +234,6 @@ namespace DLA
                 }
             }
             return heights;
-        }
-
-        // originally i was using this but its been reworked
-        public static Vector2Int[,] UpscaleDirectionMap(Vector2Int[,] map, int newSize, int jitterRange = 0)
-        {
-            int oldSize = map.GetLength(0);
-            int scaleFactor = newSize / oldSize;
-            if (newSize % oldSize != 0)
-            {
-                Debug.LogError("error in upscale, size isnt right");
-            }
-
-            Vector2Int[,] newMap = new Vector2Int[newSize, newSize];
-            for (int i = 0; i < newSize; i++)
-            {
-                for (int j = 0; j < newSize; j++)
-                {
-                    newMap[i, j] = SENTINEL;
-                }
-            }
-
-            for (int x = 0; x < oldSize; x++)
-            {
-                for (int y = 0; y < oldSize; y++)
-                {
-                    Vector2Int oldOffset = map[x, y];
-                    if (oldOffset == SENTINEL) continue;
-
-                    int childX = x * scaleFactor;
-                    int childY = y * scaleFactor;
-
-                    if (oldOffset == Vector2Int.zero)
-                    {
-                        newMap[childX, childY] = Vector2Int.zero;
-                        continue;
-                    }
-
-                    int parentX = childX + oldOffset.x * scaleFactor;
-                    int parentY = childY + oldOffset.y * scaleFactor;
-
-                    int midX = (childX + parentX) / 2;
-                    int midY = (childY + parentY) / 2;
-
-                    int maxAllowedJitter = scaleFactor / 2;
-                    int actualJitter = jitterRange > maxAllowedJitter ? maxAllowedJitter : jitterRange;
-
-                    int jitterX = 0;
-                    int jitterY = 0;
-                    if (actualJitter > 0)
-                    {
-                        lock (rndLock)
-                        {
-                            jitterX = globalRnd.Next(-actualJitter, actualJitter + 1);
-                            jitterY = globalRnd.Next(-actualJitter, actualJitter + 1);
-                        }
-                    }
-
-                    int jitteredMidX = Mathf.Clamp(midX + jitterX, 0, newSize - 1);
-                    int jitteredMidY = Mathf.Clamp(midY + jitterY, 0, newSize - 1);
-
-                    newMap[childX, childY] = new Vector2Int(
-                        jitteredMidX - childX,
-                        jitteredMidY - childY
-                    );
-
-                    jitterOffsets.Add(new Vector2Int(jitteredMidX, jitteredMidY));
-
-                    int clampedParentX = Mathf.Clamp(parentX, 0, newSize - 1);
-                    int clampedParentY = Mathf.Clamp(parentY, 0, newSize - 1);
-                    newMap[jitteredMidX, jitteredMidY] = new Vector2Int(
-                        clampedParentX - jitteredMidX,
-                        clampedParentY - jitteredMidY
-                    );
-                }
-            }
-
-            return newMap;
         }
 
         public static List<int> ComputeLevels(int baseSize, int finalSize)
@@ -480,12 +375,127 @@ namespace DLA
                 for (int y = 0; y < size; y++)
                 {
                     result[x,y] = (mapB[x,y] - mapA[x,y]) * t + mapA[x,y];
-                    //pretty sure mathf.lerp breaks at task time, this takes like 2 seconds to do so
                 }
             }
             return result;
         }
-    }
+        private static int Cross(Vector2Int origin, Vector2Int pointA, Vector2Int pointB)
+        {
+            return (pointA.x - origin.x) * (pointB.y - origin.y)
+                 - (pointA.y - origin.y) * (pointB.x - origin.x);
+        }
 
+
+        public static List<Vector2Int> ConvexHull(List<Vector2Int> points)
+        {
+
+            if (points.Count <= 1) return new List<Vector2Int>(points);
+
+            points.Sort((a, b) => a.x != b.x ? a.x.CompareTo(b.x) : a.y.CompareTo(b.y));
+            
+
+            List<Vector2Int> lower = new List<Vector2Int>();
+            for (int i = 0; i < points.Count; i++)
+            {
+                Vector2Int point = points[i];
+                while (lower.Count >= 2 && Cross(lower[lower.Count - 2], lower[lower.Count - 1], point) <= 0)
+                {
+                    lower.RemoveAt(lower.Count - 1);
+                }
+                lower.Add(point);
+            }
+
+            List<Vector2Int> upper = new List<Vector2Int>();
+            for (int i = points.Count - 1; i >= 0; i--)
+            {
+                Vector2Int point = points[i];
+                while (upper.Count >= 2 && Cross(upper[upper.Count - 2], upper[upper.Count - 1], point) <= 0)
+                {
+                    upper.RemoveAt(upper.Count - 1);
+                }
+                upper.Add(point);
+            }
+
+            lower.RemoveAt(lower.Count - 1);
+            upper.RemoveAt(upper.Count - 1);
+            lower.AddRange(upper);
+            return lower;
+        }
+        public static List<Vector2Int> RefineHull(List<Vector2Int> hull, List<Vector2Int> allPts, float maxGap)
+        {
+            bool inserted;
+            do
+            {
+                inserted = false;
+                List<Vector2Int> newHull = new List<Vector2Int>();
+
+                for (int i = 0; i < hull.Count; i++)
+                {
+                    Vector2Int pointA = hull[i];
+                    Vector2Int pointB = hull[(i + 1) % hull.Count];
+                    newHull.Add(pointA);
+
+                    float edgeLen = Vector2Int.Distance(pointA, pointB);
+                    if (edgeLen > maxGap)
+                    {
+                        float bestDist = 0f;
+                        Vector2Int bestPoint = default;
+                        Vector2 edge = (pointB - pointA).ToVector2();
+                        for (int j = 0; j < allPts.Count; j++)
+                        {
+                            Vector2Int point = allPts[j];
+                            Vector2 toPoint = (point - pointA).ToVector2();
+                            float t = Vector2.Dot(toPoint, edge) / edge.sqrMagnitude;
+                            if (t <= 0 || t >= 1) continue;
+                            Vector2 proj = pointA.ToVector2() + edge * t;
+                            float currDistance = Vector2.Distance(point.ToVector2(), proj);
+                            if (currDistance > bestDist)
+                            {
+                                bestDist = currDistance;
+                                bestPoint = point;
+                            }
+                        }
+
+                        if (bestDist > 0f && Vector2Int.Distance(pointA, bestPoint) <= maxGap && Vector2Int.Distance(bestPoint, pointB) <= maxGap)
+                        {
+                            newHull.Add(bestPoint);
+                            inserted = true;
+                            Debug.Log("refined");
+                        }
+                    }
+                }
+                hull = newHull;
+            } while (inserted);
+            return hull;
+        }
+        
+        
+        public static List<Vector2Int> ScalePolygon(List<Vector2Int> polygon, float scale)
+        {
+
+            Vector2 center = Vector2.zero;
+            foreach (Vector2Int point in polygon) 
+            { 
+                center += point; 
+            }
+            center /= polygon.Count;
+
+            List<Vector2Int> outPoly = new List<Vector2Int>(polygon.Count);
+            foreach (Vector2 point in polygon)
+            {
+                Vector2 offset = point - center;
+                Vector2 newPoint = center + offset * scale;
+                outPoly.Add(ToVector2Int(newPoint));
+            }
+            return outPoly;
+        }
+        public static int EuclidsAlgorithm (int a, int b)
+        {
+            // finds the greatest common dividor of 2 values
+            return b == 0 ? a : EuclidsAlgorithm(b, a % b);
+        }
+        static Vector2 ToVector2(this Vector2Int vec) => new Vector2(vec.x, vec.y);
+        static Vector2Int ToVector2Int(this Vector2 vec) => new Vector2Int(Mathf.RoundToInt(vec.x), Mathf.RoundToInt(vec.y));
+    }
 
 }

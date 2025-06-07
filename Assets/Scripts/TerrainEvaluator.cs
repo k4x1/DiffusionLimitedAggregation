@@ -31,7 +31,7 @@ public class TerrainEvaluator
 
     source https://dl.acm.org/doi/fullHtml/10.1145/3514244#sec-8
 
-    this is actually way harder than I thought because I have to find this lookup file to generare the geomorphons
+    this is actually way harder than I thought because I have to find this lookup file to generate the geomorphons
     https://grass.osgeo.org/grass-stable/manuals/r.geomorphon.html
     I spent like 3 hours trying to find this file, went through all of the source code history and downloaded the entire program to try to figure out where to get that lookup table for now 
     I will just do the second method

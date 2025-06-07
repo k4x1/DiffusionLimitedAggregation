@@ -9,18 +9,17 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using System.IO;
-using System.Linq;
 using System;
-using System.Security.Cryptography;
-using UnityEngine.UIElements;
+
 
 namespace DLA {
 
     public enum TerrainMode
     {
-        Basic,
-        MultiResolution,
-        PerlinNoise
+        BasicDLA,
+        MultiResolutionDLA,
+        PerlinNoise,
+        SimplexNoise
     }
 
     [Serializable]
@@ -48,7 +47,7 @@ namespace DLA {
 
         public Terrain terrain;
         [Header("DLA settings")]
-        public int resolution = 513;
+        public int resolution = 512;
         public bool diagonalWalk = false;
         public float heightMultiplier = 100f; // scales only the drawn map
 
@@ -61,6 +60,7 @@ namespace DLA {
 
 
         public bool convexHull = false;
+        public float maxHullEdgeGap = 12;
 
 
         //basic
@@ -82,7 +82,15 @@ namespace DLA {
         [HideInInspector] public float perlinBaseScale = 0.005f;
         [HideInInspector] public float perlinPersistence = 0.5f;
         [HideInInspector] public float perlinLacunarity = 2.0f;
-        [HideInInspector] public int perlinSeed = 42;
+        [HideInInspector] public int perlinSeed = 6767;
+
+        [Header("Simplex noise settings")]
+        [HideInInspector] public int simplexOctaves = 4;
+        [HideInInspector] public float simplexBaseScale = 0.005f;
+        [HideInInspector] public float simplexPersistence = 0.5f;
+        [HideInInspector] public float simplexLacunarity = 2.0f;
+        [HideInInspector] public int simplexSeed = 6767;
+
 
         [Header("Post processing options")]
         public bool autoExpose = false;
@@ -102,6 +110,7 @@ namespace DLA {
         public bool createHeightTexture = true;
         public bool drawWalkers = true;
         public bool drawConnections = true;
+        public bool drawConvexHull = true;
 
         // height stuff
         [HideInInspector] Texture2D heightTex;
@@ -117,7 +126,10 @@ namespace DLA {
         [HideInInspector] float[,] heightMapData;
         [HideInInspector] List<Walker> walkers = new List<Walker>();
         [HideInInspector] SynchronizationContext unityContext;
-        [HideInInspector] CancellationTokenSource cts;
+        [HideInInspector] CancellationTokenSource cts; 
+        [HideInInspector] List<Vector2Int> clusterPoints = new List<Vector2Int>();
+        [HideInInspector] List<Vector2Int> hullPoints = new List<Vector2Int>();
+
         [HideInInspector] string dataPath
         {
             get
@@ -129,7 +141,7 @@ namespace DLA {
         [HideInInspector] object mapLock = new object();
 
         [Header("DLA Mode")]
-        public TerrainMode mode = TerrainMode.Basic;
+        public TerrainMode mode = TerrainMode.BasicDLA;
 
         public void StartTaskDLA()
         {
@@ -147,17 +159,31 @@ namespace DLA {
             }
 
             Task.Run(() => {
+
+                DLAMap = new bool[resolution, resolution];
+                parentMap = new Vector2Int[resolution, resolution];
+                for (int i = 0; i < resolution; i++)
+                {
+                    for (int j = 0; j < resolution; j++)
+                    {
+                        parentMap[i, j] = Utils.SENTINEL;
+                    }
+                }
+
                 switch (mode)
                 {
-                    case TerrainMode.Basic:
+                    case TerrainMode.BasicDLA:
                         RunDLA(cts.Token);
                         break;
 
-                    case TerrainMode.MultiResolution:
+                    case TerrainMode.MultiResolutionDLA:
                         RunMultiResolutionDLA(cts.Token);
                         break;
                     case TerrainMode.PerlinNoise:
                         RunPerlinNoise(cts.Token);
+                        break;
+                    case TerrainMode.SimplexNoise:
+                        RunSimplexNoise(cts.Token);
                         break;
                 }
                 stopwatch.Stop();
@@ -193,11 +219,14 @@ namespace DLA {
 
             Vector2Int root = new Vector2Int(resolution / 2, resolution / 2);
 
-            parentMap = new Vector2Int[resolution,resolution];
             heightMapData = new float[resolution, resolution];
-
-            DLAMap = new bool[resolution, resolution];
             DLAMap[root.x, root.y] = true;
+
+            clusterPoints = new List<Vector2Int>();
+            hullPoints = new List<Vector2Int>();
+            clusterPoints.Add(root);
+            hullPoints.Add(root);
+
 
             int stuckCount = 0;
             int centerX = resolution / 2;
@@ -205,7 +234,7 @@ namespace DLA {
             float maxDist = Mathf.Sqrt(centerX * centerX + centerY * centerY);
             for (int i = 0; i < walkerCount; i++)
             {
-                walkers.Add(new Walker(DLAMap));
+                walkers.Add(InstantiateWalker());
             }
             while (stuckCount < maxWalkers && !token.IsCancellationRequested)
             {
@@ -218,7 +247,7 @@ namespace DLA {
 
                     if (killWalkers &&  walker.stepCount >= maxSteps)
                     {
-                        walkers[i] = new Walker(DLAMap);
+                        walkers[i] = InstantiateWalker();
                         // kill walkers when max steps reached
                         continue;
                     }
@@ -227,10 +256,13 @@ namespace DLA {
                     {
                         lock (mapLock)
                         {
-                            //walkers[i] = new Walker(DLAMap);
+                            if(killWalkers || convexHull) { 
+                                walkers[i] = InstantiateWalker();
+                            }
                             parentMap[walkerPos.x, walkerPos.y] = walkerStuckDir;
                             DLAMap[walkerPos.x, walkerPos.y] = true;
                             heightMapData[walkerPos.x, walkerPos.y] = 1;
+                            if (convexHull) AddClusterPoint(walkerPos);
                         }
                         stuckCount++;
                         if (stuckCount >= maxWalkers) break;
@@ -246,10 +278,9 @@ namespace DLA {
             #if UNITY_EDITOR
             EditorApplication.delayCall += () =>
             {
-                Debug.Log($"Settings: resolution({resolution}), maxWalkers(maxWalkers), walkerCount(walkerCount)");
                 SaveDLAData();
-                
                 PostProcessing();
+                Debug.Log($"Settings: resolution({resolution}), maxWalkers(maxWalkers), walkerCount(walkerCount)");
             };
             #else
 
@@ -257,6 +288,22 @@ namespace DLA {
 
         }
 
+        private void AddClusterPoint(Vector2Int walkerPos)
+        {
+            clusterPoints.Add(walkerPos);
+            if (convexHull && clusterPoints.Count > 2)
+            {
+                List<Vector2Int> hull = Utils.ConvexHull(clusterPoints);
+                hullPoints = Utils.RefineHull(hull, clusterPoints, maxHullEdgeGap);
+                //hullPoints = Utils.ScalePolygon(hullPoints, 1f);
+            }
+        }
+        Walker InstantiateWalker()
+        {
+            List<Vector2Int> useHull = (convexHull && hullPoints.Count > 1) ? hullPoints : null;
+
+            return new Walker(DLAMap, useHull);
+        }
         private void RunMultiResolutionDLA(CancellationToken token)
         {
 
@@ -382,9 +429,7 @@ namespace DLA {
                     $"lerpAlpha({lerpAlpha})");
             };
 #else
-            SaveDLAData();
-            PostProcessing();
-            Debug.Log($"MultiResolution DLA took {stopwatch.Elapsed.TotalSeconds:F3}s | final res {resolution}");
+           
 #endif
         }
         void RunDLALevel(int size, int walkersToAdd, int[,] depthMap, CancellationToken token)
@@ -392,9 +437,22 @@ namespace DLA {
             int stuckCount = 0;
             walkers = new List<Walker>();
 
+            clusterPoints = new List<Vector2Int>();
+            int mapSize = DLAMap.GetLength(0);
+
+            for (int x = 0; x < mapSize; x++)
+            {
+                for (int y = 0; y < mapSize; y++)
+                {
+                    if (DLAMap[x, y]) clusterPoints.Add(new Vector2Int(x, y));
+                }
+            }
+
+            hullPoints = Utils.ConvexHull(clusterPoints);
+
             for (int i = 0; i < walkersToAdd; i++)
             {
-                walkers.Add(new Walker(DLAMap));
+                walkers.Add(InstantiateWalker());
             }
 
             while (stuckCount < walkersToAdd && !token.IsCancellationRequested)
@@ -407,16 +465,21 @@ namespace DLA {
 
                     if (killWalkers && walker.stepCount >= walker.maxSteps)
                     {
-                        walkers[i] = new Walker(DLAMap);
+                        walkers[i] = new Walker(DLAMap, convexHull ? hullPoints : null);
                         continue;
                     }
                     if (Step(walker,out Vector2Int walkerPos, out Vector2Int walkerStuckDir))
                     {
                         lock (mapLock)
                         {
+                            if (killWalkers || convexHull)
+                            {
+                                walkers[i] = InstantiateWalker();
+                            }
                             depthMap[walkerPos.x, walkerPos.y] = depthMap[walkerPos.x + walkerStuckDir.x, walkerPos.y + walkerStuckDir.y] + 1;
                             parentMap[walkerPos.x, walkerPos.y] = walkerStuckDir; // direction to parent
                             DLAMap[walkerPos.x, walkerPos.y] = true;  // current map, we reinitialize at each step
+                            if (convexHull) AddClusterPoint(walkerPos);
                         }
                         stuckCount++;
                         if (stuckCount >= walkersToAdd) break;
@@ -424,12 +487,10 @@ namespace DLA {
                 }
             }
         }
-
-
         private void RunPerlinNoise(CancellationToken token)
         {
-            int res = resolution;
-            heightMapData = new float[res, res];
+            int size = resolution;
+            heightMapData = new float[size, size];
 
             System.Random perlinRnd = new System.Random(perlinSeed);
             Vector2[] octaveOffsets = new Vector2[perlinOctaves];
@@ -450,10 +511,10 @@ namespace DLA {
 
             Stopwatch stopwatch = Stopwatch.StartNew();
 
-            for (int y = 0; y < res; y++)
+            for (int y = 0; y < size; y++)
             {
                 if (token.IsCancellationRequested) return;
-                for (int x = 0; x < res; x++)
+                for (int x = 0; x < size; x++)
                 {
                     float noiseHeight = 0f;
                     float frequency = perlinBaseScale;
@@ -481,26 +542,91 @@ namespace DLA {
 #if UNITY_EDITOR
             EditorApplication.delayCall += () =>
             {
-                TerrainData tData = terrain.terrainData;
-                tData.heightmapResolution = res;
-                tData.size = new Vector3(res, heightMultiplier, res);
-
-                tData.SetHeights(0, 0, heightMapData);
-
-                EditorUtility.SetDirty(tData);
+                SaveDLAData();
+                PostProcessing();
                 Debug.Log($"Settings: perlinOctaves({perlinOctaves}), perlinBaseScale({perlinBaseScale})," +
                     $" perlinPersistence({perlinPersistence}), perlinLacunarity({perlinLacunarity}), perlinSeed({perlinSeed}),");
             };
 #else
-            TerrainData tData = terrain.terrainData;
-            tData.heightmapResolution = res;
-            tData.size = new Vector3(res, heightMultiplier, res);
-            tData.SetHeights(0, 0, heightMapData);
-            Debug.Log($"Settings: perlinOctaves({perlinOctaves}), perlinBaseScale({perlinBaseScale})," +
-                    $" perlinPersistence({perlinPersistence}), perlinLacunarity({perlinLacunarity}), perlinSeed({perlinSeed}),");
+
 #endif
         }
+        private void RunSimplexNoise(CancellationToken token)
+        {
+            int size = resolution;
+            heightMapData = new float[size, size];
+            NoiseTest.OpenSimplexNoise openSimplexNoise = new NoiseTest.OpenSimplexNoise(simplexSeed);
 
+            System.Random simplexRnd = new System.Random(simplexSeed);
+            Vector2[] octaveOffsets = new Vector2[simplexOctaves];
+            for (int i = 0; i < simplexOctaves; i++)
+            {
+                float offsetX = simplexRnd.Next(-100000, 100000);
+                float offsetY = simplexRnd.Next(-100000, 100000);
+                octaveOffsets[i] = new Vector2(offsetX, offsetY);
+            }
+
+            float maxPossibleHeight = 0;
+            float amplitude = 1;
+            for (int i = 0; i < simplexOctaves; i++)
+            {
+                maxPossibleHeight += amplitude;
+                amplitude *= simplexPersistence;
+            }
+
+            Stopwatch stopwatch = Stopwatch.StartNew();
+            float heightMax = float.MaxValue;
+            float heightMin = float.MinValue;
+            for (int y = 0; y < size; y++)
+            {
+                if (token.IsCancellationRequested) return;
+                for (int x = 0; x < size; x++)
+                {
+                    float noiseHeight = 0f;
+                    float frequency = simplexBaseScale;
+                    amplitude = 1f;
+
+                    for (int i = 0; i < simplexOctaves; i++)
+                    {
+                        float sampleX = (x + octaveOffsets[i].x) * frequency;
+                        float sampleY = (y + octaveOffsets[i].y) * frequency;
+
+                        float simplexValue = (float)openSimplexNoise.Evaluate(sampleX, sampleY) * 2f - 1f;
+                        noiseHeight += simplexValue * amplitude;
+
+                        amplitude *= simplexPersistence;
+                        frequency *= simplexLacunarity;
+                    }
+
+                    //float normalizedHeight = (noiseHeight / maxPossibleHeight + 1f) / 2f;
+                    heightMapData[y, x] = noiseHeight;
+                    heightMin = Mathf.Min(heightMax, noiseHeight);
+                    heightMax = Mathf.Max(heightMax, noiseHeight);
+                }
+            }
+            // normalize to 0-1 
+            float invRange = 1f / (heightMax - heightMin);
+            for (int y = 0; y < size; y++)
+            {
+                for (int x = 0; x < size; x++) { 
+                    heightMapData[y, x] = (heightMapData[y, x] - heightMin) * invRange;
+                }
+            }
+
+            stopwatch.Stop();
+
+#if UNITY_EDITOR
+            EditorApplication.delayCall += () =>
+            {
+                SaveDLAData();
+                PostProcessing();
+                Debug.Log($"Settings: simplexOctaves({simplexOctaves}), simplexBaseScale({simplexBaseScale})," +
+                    $" simplexPersistence({simplexPersistence}), simplexLacunarity({simplexLacunarity}), simplexSeed({simplexSeed})");
+            };
+#else
+
+#endif
+        }
         public void PostProcessing()
         {
             if (heightMapData == null || heightMapData.Length == 0)
@@ -518,7 +644,7 @@ namespace DLA {
             {
                 if (parentMap == null || parentMap.Length == 0)
                 {
-                    Debug.LogError("no parentMap set");
+                    Debug.Log("no parentMap set");
                 }
                 else { 
                     int[,] weightMap = Utils.CalculateWeights(parentMap);
@@ -567,6 +693,7 @@ namespace DLA {
                 );
             }
         }
+      
         public void SaveDLAData()
         {
             try
@@ -697,7 +824,6 @@ namespace DLA {
             MeshRenderer renderer = quadPrefab.GetComponent<MeshRenderer>();
             renderer.sharedMaterial.mainTexture = quadTexture;
         }
-
         private void OnDrawGizmos()
         {
             if (DLAMap != null)
@@ -715,6 +841,7 @@ namespace DLA {
                             {
                                 Vector3 worldPos = new Vector3(x, 100f, y);
                                 Gizmos.DrawCube(worldPos, Vector3.one * cubeSize);
+
                             }
                         }
                     }
@@ -727,13 +854,13 @@ namespace DLA {
                         for (int y = 0; y < size; y++)
                         {
                             if (parentMap[x, y] == Utils.SENTINEL) continue;
-                            Vector3 worldPos = new Vector3(x, 101f, y);
-                            Vector3 endPos = new Vector3(x + parentMap[x, y].x, 101f, y + parentMap[x, y].y);
-                            Gizmos.DrawLine(worldPos, endPos);
+                            Vector3 startPoint = new Vector3(x, 101f, y);
+                            Vector3 endPoint = new Vector3(x + parentMap[x, y].x, 101f, y + parentMap[x, y].y);
+                            Gizmos.DrawLine(startPoint, endPoint);
                         }
                     }
                 }
-                if (walkers != null && walkers.Count != 0 && drawWalkers)
+                if (drawWalkers && walkers != null && walkers.Count > 0 )
                 {
                      Walker[] snapshot = walkers.ToArray();
 
@@ -742,23 +869,36 @@ namespace DLA {
                         if (walker == null || walker.inPos) continue;
 
                         Gizmos.color = new Color(0, 1, 0, 0.5f);
-                        Vector3 pos3D = new Vector3(walker.GetPos().x, 100, walker.GetPos().y);
-                        Gizmos.DrawCube(pos3D, Vector3.one);
+                        Vector3 worldPos = new Vector3(walker.GetPos().x, 100, walker.GetPos().y);
+                        Gizmos.DrawCube(worldPos, Vector3.one);
                     }
                 }
-               /* if (heightMapData != null && drawHeightMapData)
+                if (drawConvexHull && hullPoints != null && hullPoints.Count>0 )
                 {
-                    for (int x = 0; x < size; x++)
+                    Vector2Int[] snapshot = hullPoints.ToArray();
+
+                    for(int i  = 0; i < snapshot.Length; i++) 
                     {
-                        for (int y = 0; y < size; y++)  
-                        {
-                            Gizmos.color = Color.Lerp(Color.black, Color.white, heightMapData[x, y]);
-                            Gizmos.DrawCube(new Vector3(x,200,y), Vector3.one);
-                            // please forgive me for my laggy crimes    
-                        }
-                        
+                        Gizmos.color = Color.yellow;
+                        Vector3 startPoint = new Vector3(snapshot[i].x, 102f, snapshot[i].y);
+                        int next = i != snapshot.Length-1 ? i + 1 : 0;
+                        Vector3 endPoint = new Vector3(snapshot[next].x, 102f, snapshot[next].y);
+                        Gizmos.DrawLine(startPoint, endPoint);
                     }
-                }*/
+                }
+                /* if (heightMapData != null && drawHeightMapData)
+                 {
+                     for (int x = 0; x < size; x++)
+                     {
+                         for (int y = 0; y < size; y++)  
+                         {
+                             Gizmos.color = Color.Lerp(Color.black, Color.white, heightMapData[x, y]);
+                             Gizmos.DrawCube(new Vector3(x,200,y), Vector3.one);
+                             // please forgive me for my laggy crimes    
+                         }
+
+                     }
+                 }*/
             }
          
         }
