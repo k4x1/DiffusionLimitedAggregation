@@ -695,7 +695,11 @@ namespace DLA {
             tData.heightmapResolution = resolution;
             tData.size = new Vector3(resolution, heightMultiplier, resolution);
             tData.SetHeights(0, 0, heightMapData);
+#if UNITY_EDITOR
             EditorUtility.SetDirty(terrain.terrainData);
+#else
+
+#endif
         }
         private bool Step(Walker walker, out Vector2Int stuckPos, out Vector2Int dirToConnection)
         {
