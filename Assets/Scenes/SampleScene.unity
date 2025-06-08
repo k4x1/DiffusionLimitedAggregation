@@ -793,10 +793,10 @@ MonoBehaviour:
   radius: 24
   standardDeviation: 3
   smoothPower: 0.5
-  createHeightTexture: 1
-  drawWalkers: 1
-  drawConnections: 1
-  drawConvexHull: 1
+  createHeightTexture: 0
+  drawWalkers: 0
+  drawConnections: 0
+  drawConvexHull: 0
   mode: 1
 --- !u!1 &2014706076
 GameObject:
@@ -841,7 +841,7 @@ MonoBehaviour:
   - {fileID: 2800000, guid: 25dfdad915e24f641bfd353e1afebb9f, type: 3}
   - {fileID: 2800000, guid: 710c064e1523d1b448c4354b4bab0e38, type: 3}
   - {fileID: 2800000, guid: c04412b723834344da505d4fadc1f8e5, type: 3}
-  result: -0.04087878816919474
+  result: 0.15269388945099904
   heightmapJson: {fileID: 4900000, guid: 7f5e23f0cebfa434eae34bdd0f04f6dd, type: 3}
   gizmoBarWidth: 0.1
   gizmoMaxHeight: 5
@@ -855,7 +855,7 @@ Transform:
   m_GameObject: {fileID: 2014706076}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 302.62326, y: -128.17432, z: 344.77548}
+  m_LocalPosition: {x: 242.8, y: 296.8, z: 344.77548}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
