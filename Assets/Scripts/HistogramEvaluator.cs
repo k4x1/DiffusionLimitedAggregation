@@ -369,7 +369,7 @@ namespace DLA
 
         private void OnDrawGizmos()
         {
-            if (heighMapA == null || heightMapB == null) return;
+     /*       if (heighMapA == null || heightMapB == null) return;
 
             genAsFloat = LoadHeightmap(heighMapA);
             realAsFloat = LoadHeightmap(heightMapB);
@@ -382,7 +382,7 @@ namespace DLA
             DrawHistogramGizmos(normGen, originGen, Color.red);
 
             Vector3 originReal = transform.position + Vector3.right * (normGen.Length * gizmoBarWidth + histogramSpacing);
-            DrawHistogramGizmos(normReal, originReal, Color.blue);
+            DrawHistogramGizmos(normReal, originReal, Color.blue);*/
         }
     }
 }

@@ -43,8 +43,8 @@ namespace DLA {
     public class DLA : MonoBehaviour
     {
 
-        
 
+        private readonly object listLock = new object();
         public Terrain terrain;
         [Header("DLA settings")]
         public int resolution = 512;
@@ -250,7 +250,10 @@ namespace DLA {
             float maxDist = Mathf.Sqrt(centerX * centerX + centerY * centerY);
             for (int i = 0; i < walkerCount; i++)
             {
-                walkers.Add(InstantiateWalker());
+                lock (listLock)
+                {
+                    walkers.Add(InstantiateWalker());
+                }
             }
             while (stuckCount < maxWalkers && !token.IsCancellationRequested)
             {
@@ -454,7 +457,7 @@ namespace DLA {
 
             clusterPoints = new List<Vector2Int>();
             int mapSize = DLAMap.GetLength(0);
-
+            if (convexHull) { 
             for (int x = 0; x < mapSize; x++)
             {
                 for (int y = 0; y < mapSize; y++)
@@ -464,10 +467,14 @@ namespace DLA {
             }
 
             hullPoints = Utils.ConvexHull(clusterPoints);
+            }
 
             for (int i = 0; i < walkersToAdd; i++)
             {
-                walkers.Add(InstantiateWalker());
+                lock (listLock)
+                {
+                    walkers.Add(InstantiateWalker());
+                }
             }
 
             while (stuckCount < walkersToAdd && !token.IsCancellationRequested)
@@ -644,6 +651,8 @@ namespace DLA {
         }
         public void PostProcessing()
         {
+            walkers = new List<Walker>();
+
             if (heightMapData == null || heightMapData.Length == 0)
             {
                 if (!LoadDLAData())
@@ -888,7 +897,12 @@ namespace DLA {
                 }
                 if (drawWalkers && walkers != null && walkers.Count > 0 )
                 {
-                     Walker[] snapshot = walkers.ToArray(); 
+                    Walker[] snapshot; 
+
+                    lock (listLock)
+                    {
+                        snapshot = walkers.ToArray();
+                    }
 
                     foreach (Walker walker in snapshot)
                     {
@@ -901,7 +915,12 @@ namespace DLA {
                 }
                 if (drawConvexHull && hullPoints != null && hullPoints.Count>0 )
                 {
-                    Vector2Int[] snapshot = hullPoints.ToArray();
+                    Vector2Int[] snapshot;
+
+                    lock (listLock)
+                    {
+                       snapshot = hullPoints.ToArray();
+                    }
 
                     for(int i  = 0; i < snapshot.Length; i++) 
                     {
