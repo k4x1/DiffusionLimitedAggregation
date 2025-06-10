@@ -155,7 +155,7 @@ namespace DLA {
             if (noiseGuided)
             {
                 noiseField = Utils.InitializeNoiseField(resolution, noiseFieldScale);
-                CreateMapQuad(noiseField, -resolution * 0.5f, resolution * 0.5f, ref noiseFieldQuad, ref noiseFieldTex, "NoiseField");
+                CreateMapQuad(noiseField, -resolution * 0.5f, resolution * 0.5f, ref noiseFieldQuad, ref noiseFieldTex,false, "NoiseField");
             }
 
             Task.Run(() => {
@@ -182,9 +182,41 @@ namespace DLA {
 #if UNITY_EDITOR
                 EditorApplication.delayCall += () =>
                 {
-                    Debug.Log($"{mode.ToString()} has taken {stopwatch.Elapsed.TotalSeconds:F3} time to run | resolution({resolution}), diagonalWalk({diagonalWalk}), noiseGuided({noiseGuided})");
+                    string line = ($"{mode.ToString()} has taken {stopwatch.Elapsed.TotalSeconds:F3} time to run | resolution({resolution}), " +
+                    $"diagonalWalk({diagonalWalk}), " +
+                    $"killWalkersMaxSteps({maxSteps}), " +
+                    $"killWalkers({killWalkers}), " +
+                    $"noiseGuided({noiseGuided}), " +
+                    $"noiseFieldScale({noiseFieldScale}), " +
+                    $"convexHull({convexHull}), " +
+                    $"hullUpscale({hullUpscale}), " +
+                    $"autoExpose({autoExpose}), " +
+                    $"blur({blur}), " +
+                    $"weightFalloff({weightFalloff}), " +
+                    $"radius({radius}), " +
+                    $"standardDeviation({standardDeviation}), " +
+                    $"smoothPower({smoothPower})");
+                    Debug.Log(line);
+                    Utils.Log(line);
+                    HistogramEvaluator hist = GameObject.FindFirstObjectByType<HistogramEvaluator>();
+                    if (hist != null)
+                    {
+                        Debug.Log("calculated chi");
+                        hist.LoadMapJson();
+                        double[] chis = hist.CompareJsonToRealListChi();
+                        double[] coeff = hist.CompareJsonToRealListCoefficient();
+
+
+                    }
+                    if (createHeightTexture)
+                    {
+                        CreateMapQuad(heightMapData, resolution * 1.5f, resolution * 0.5f, ref heightQuad, ref heightTex,true, "HeightMap");
+                    }
                 };
 #else
+                    
+                
+
                 Debug.Log($"{mode.ToString()} has taken {stopwatch.Elapsed.TotalSeconds:F3} time to run. resolution({resolution}), diagonalWalk({diagonalWalk}), noiseGuided({noiseGuided})");
 #endif
             },
@@ -212,9 +244,12 @@ namespace DLA {
             {
                 for (int j = 0; j < resolution; j++)
                 {
+                  
                     parentMap[i, j] = Utils.SENTINEL;
                 }
             }
+
+            parentMap[resolution/2, resolution/2] = Vector2Int.zero;
 #if UNITY_EDITOR
             EditorApplication.delayCall += () => {
 /*                if (heightQuad != null) DestroyImmediate(heightQuad);
@@ -299,7 +334,9 @@ namespace DLA {
             {
                 SaveDLAData();
                 PostProcessing();
-                Debug.Log($"Settings: resolution({resolution}), maxWalkers(maxWalkers), walkerCount(walkerCount)");
+               string line = ($"Settings: resolution({resolution}), maxWalkers({maxWalkers}), walkerCount({walkerCount}), killWalkers({killWalkers})");
+                Debug.Log(line);
+                Utils.Log(line);
             };
             #else
 
@@ -441,10 +478,12 @@ namespace DLA {
             {
                 SaveDLAData();
                 PostProcessing();
-                Debug.Log($"Settings: baseSize({baseSize}), fillFraction({fillFraction}), " +
+                string line = ($"Settings: baseSize({baseSize}), fillFraction({fillFraction}), " +
                     $"crispBlurRadius({crispBlurRadius}), crispBlurStandardDeviation({crispBlurStandardDeviation})," +
                     $"blurryBlurRadius({blurryBlurRadius}),(blurryBlurStandardDeviation({blurryBlurStandardDeviation})," +
                     $"lerpAlpha({lerpAlpha})");
+                Debug.Log(line);
+                Utils.Log(line);
             };
 #else
            
@@ -566,8 +605,10 @@ namespace DLA {
             {
                 SaveDLAData();
                 PostProcessing();
-                Debug.Log($"Settings: perlinOctaves({perlinOctaves}), perlinBaseScale({perlinBaseScale})," +
+                string line = ($"Settings: perlinOctaves({perlinOctaves}), perlinBaseScale({perlinBaseScale})," +
                     $" perlinPersistence({perlinPersistence}), perlinLacunarity({perlinLacunarity}), perlinSeed({perlinSeed}),");
+                Debug.Log(line);
+                Utils.Log(line);
             };
 #else
 
@@ -642,8 +683,10 @@ namespace DLA {
             {
                 SaveDLAData();
                 PostProcessing();
-                Debug.Log($"Settings: simplexOctaves({simplexOctaves}), simplexBaseScale({simplexBaseScale})," +
+                string line = ($"Settings: simplexOctaves({simplexOctaves}), simplexBaseScale({simplexBaseScale})," +
                     $" simplexPersistence({simplexPersistence}), simplexLacunarity({simplexLacunarity}), simplexSeed({simplexSeed})");
+                Debug.Log(line);
+                Utils.Log(line);
             };
 #else
 
@@ -686,10 +729,7 @@ namespace DLA {
                 heightMapData = Utils.AutoExpose(heightMapData);
             }
 
-            if (createHeightTexture)
-            {
-                CreateMapQuad(heightMapData,resolution*1.5f,resolution*0.5f, ref heightQuad, ref heightTex, "HeightMap");
-            }
+      
 
             TerrainData tData = terrain.terrainData;
             tData.heightmapResolution = resolution;
@@ -812,7 +852,7 @@ namespace DLA {
                 return false;
             }
         }
-        void CreateMapQuad(float[,] map, float posX, float posZ, ref GameObject quadPrefab, ref Texture2D quadTexture, string name = "MapQuad")
+        void CreateMapQuad(float[,] map, float posX, float posZ, ref GameObject quadPrefab, ref Texture2D quadTexture, bool save, string name = "MapQuad")
         {
             if (map == null || map.Length == 0) return;
             for (int i = transform.childCount - 1; i >= 0; i--)
@@ -844,7 +884,22 @@ namespace DLA {
                 }
             }
             quadTexture.Apply();
+            if (save)
+            {
+                string folderPath = Path.Combine(Application.dataPath, "dla data/GeneratedHeightmaps");
+                if (!Directory.Exists(folderPath))
+                {
+                    Directory.CreateDirectory(folderPath);
+                }
+                byte[] png = quadTexture.EncodeToPNG();
+                string fileName = $"{name}_{posX:0}_{posZ:0}_{System.DateTime.Now:yyyyMMddHHmmss}.png";
+                string fullPath = Path.Combine(folderPath, fileName);
+                File.WriteAllBytes(fullPath, png);
 
+#if UNITY_EDITOR
+                AssetDatabase.Refresh();
+#endif
+            }
             if (quadPrefab == null)
             {
                 quadPrefab = GameObject.CreatePrimitive(PrimitiveType.Quad);
@@ -951,6 +1006,7 @@ namespace DLA {
             }
          
         }
+
     }
    
 }

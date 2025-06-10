@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using UnityEngine;
 
 namespace DLA
@@ -449,6 +450,14 @@ namespace DLA
         }
         static Vector2 ToVector2(this Vector2Int vec) => new Vector2(vec.x, vec.y);
         static Vector2Int ToVector2Int(this Vector2 vec) => new Vector2Int(Mathf.RoundToInt(vec.x), Mathf.RoundToInt(vec.y));
+        static string logPath = Path.Combine(Application.dataPath, "dla data", "DLARunLog.txt");
+
+        public static void Log(string line)
+        {
+            string folder = Path.GetDirectoryName(logPath);
+            if (!Directory.Exists(folder)) Directory.CreateDirectory(folder);
+            File.AppendAllText(logPath, line + System.Environment.NewLine);
+        }
     }
 
 }

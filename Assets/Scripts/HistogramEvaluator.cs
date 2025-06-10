@@ -82,11 +82,13 @@ namespace DLA
                 double chi = ChiSquared(normJson, normReal);
                 average += chi;
                 results[i] = chi;
-                Debug.Log($"JSON vs {realTex.name}: chi = {chi}");
+                //Debug.Log($"JSON vs {realTex.name}: chi = {chi}");
             }
             average = average / realHeightMapList.Length;
             result = average;
-            Debug.Log($"Average chisqr score = {average}");
+            string line = ($"Average chisqr score = {average}");
+            Debug.Log(line);
+            Utils.Log(line);
             return results;
         }
 
@@ -116,11 +118,13 @@ namespace DLA
                 double coeff = CorrelationCoefficient(normJson, normReal);
                 average += coeff;
                 results[i] = coeff;
-                Debug.Log($"JSON vs {realTex.name}: coefficient = {coeff}");
+               // Debug.Log($"JSON vs {realTex.name}: coefficient = {coeff}");
             }
             average = average / realHeightMapList.Length;
             result = average;
-            Debug.Log($"Average coefficient score = {average}");
+            string line = ($"Average coefficient score = {average}");
+            Debug.Log(line);
+            Utils.Log(line);
             return results;
         }
       
@@ -160,7 +164,7 @@ namespace DLA
                 }
             }
 
-            Debug.Log($"loaded height map size ({size}x{size})");
+          //  Debug.Log($"loaded height map size ({size}x{size})");
         }
 
 
