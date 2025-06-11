@@ -308,6 +308,9 @@ namespace DLA {
 
                     if (Step(walker, out Vector2Int walkerPos, out Vector2Int walkerStuckDir))
                     {
+                        
+                        float dist = Vector2Int.Distance(walkerPos, new Vector2Int(centerX, centerY));
+                        float strength = Mathf.Exp(-2f * (dist / maxDist));
                         lock (mapLock)
                         {
                             if(killWalkers || convexHull) { 
@@ -349,7 +352,7 @@ namespace DLA {
             clusterPoints.Add(walkerPos);
             if (convexHull && clusterPoints.Count > 2)
             {
-                List<Vector2Int> hull = Utils.ConvexHull(clusterPoints);
+                hullPoints = Utils.ConvexHull(clusterPoints);
                 hullPoints = Utils.ScalePolygon(hullPoints, hullUpscale);
             }
         }
@@ -976,33 +979,22 @@ namespace DLA {
                 {
                     Vector2Int[] snapshot;
 
-                    lock (listLock)
+                   ///lock (listLock)
                     {
                        snapshot = hullPoints.ToArray();
                     }
 
-                    for(int i  = 0; i < snapshot.Length; i++) 
+                    for(int i  = 0; i < hullPoints.Count; i++) 
                     {
                         Gizmos.color = Color.yellow;
-                        Vector3 startPoint = new Vector3(snapshot[i].x, 102f, snapshot[i].y);
-                        int next = i != snapshot.Length-1 ? i + 1 : 0;
-                        Vector3 endPoint = new Vector3(snapshot[next].x, 102f, snapshot[next].y);
+                        Vector3 startPoint = new Vector3(hullPoints[i].x, 102f, hullPoints[i].y);
+                        int next = i != hullPoints.Count - 1 ? i + 1 : 0;
+                        Vector3 endPoint = new Vector3(hullPoints[next].x, 102f, hullPoints[next].y);
+                      //  Debug.Log(hullPoints.Count);
                         Gizmos.DrawLine(startPoint, endPoint);
                     }
                 }
-                /* if (heightMapData != null && drawHeightMapData)
-                 {
-                     for (int x = 0; x < size; x++)
-                     {
-                         for (int y = 0; y < size; y++)  
-                         {
-                             Gizmos.color = Color.Lerp(Color.black, Color.white, heightMapData[x, y]);
-                             Gizmos.DrawCube(new Vector3(x,200,y), Vector3.one);
-                             // please forgive me for my laggy crimes    
-                         }
 
-                     }
-                 }*/
             }
          
         }
